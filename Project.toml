@@ -1,0 +1,4 @@
+name = "Penopt"
+uuid = "fb8f6f4e-b8f1-11e9-2b95-bdba3fec731e"
+authors = ["Michal Kocvara <kocvara@penopt.com>", "Benoît Legat <benoit.legat@gmail.com>", "Michael Stingl <mstingl@penopt.com>"]
+version = "0.0.0"
