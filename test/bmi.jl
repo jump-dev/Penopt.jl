@@ -45,7 +45,6 @@ using Penopt
     @test uoutput ≈ [5.88857e-9, 8.60883e-10, 7.75871e-10, 2.47721e-10, 0.00572922, -0.0694957, -0.0294404, 0.842987, 0.357114, 0.151284] rtol=1e-4
     @test length(iresults) == 4
     @test iresults isa Vector{Cint}
-    @test length(fresults) == 5
-    @test fresults isa Vector{Cdouble}
-    @test info == 3
+    @test fresults ≈ [6.55463e-7, -0.318871, 0.0, 7.51078e-9, 5.59009e-11] rtol=1e-6
+    @test info isa Cint
 end
