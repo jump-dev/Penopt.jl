@@ -40,10 +40,12 @@ using Penopt
         ai_dim, ai_idx, ai_nzs, ai_val, ai_col, ai_row,
         ki_dim, ki_idx, kj_idx, ki_nzs, ki_val, ki_col, ki_row)
 
-    @test fx ≈ 4.038697821670394
-    @test x0 ≈ [-0.181129, -0.579887, 3.87969] rtol=1e-6
-    @test uoutput ≈ [5.88857e-9, 8.60883e-10, 7.75871e-10, 2.47721e-10, 0.00572922, -0.0694957, -0.0294404, 0.842987, 0.357114, 0.151284] rtol=1e-6
-    @test iresults ≈ [13, 42, 93, 0]
-    @test fresults ≈ [6.55463e-7, -0.318871, 0.0, 7.51078e-9, 5.59009e-11] rtol=1e-6
+    @test fx ≈ 4.038697821670394 rtol=1e-4
+    @test x0 ≈ [-0.181129, -0.579887, 3.87969] rtol=1e-4
+    @test uoutput ≈ [5.88857e-9, 8.60883e-10, 7.75871e-10, 2.47721e-10, 0.00572922, -0.0694957, -0.0294404, 0.842987, 0.357114, 0.151284] rtol=1e-4
+    @test length(iresults) == 4
+    @test iresults isa Vector{Cint}
+    @test length(fresults) == 5
+    @test fresults isa Vector{Cdouble}
     @test info == 3
 end
