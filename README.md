@@ -6,9 +6,9 @@
 solver. It exports the `sedumi` function that is a thin wrapper on top of the
 `penbmi` C function and uses it to define the `Penbmi.Optimizer` object
 that implements the solver-independent
-[MathOptInterface](https://github.com/JuliaOpt/MathOptInterface.jl) API.
+[MathOptInterface](https://github.com/jump-dev/MathOptInterface.jl) API.
 
-To use it with [JuMP](https://github.com/JuliaOpt/JuMP.jl), simply do
+To use it with [JuMP](https://github.com/jump-dev/JuMP.jl), simply do
 ```julia
 using JuMP
 using Penopt
@@ -24,7 +24,7 @@ model = Model(with_optimizer(Penbmi.Optimizer, ???=???))
 You can install `Penopt.jl` through the
 [Julia package manager](https://docs.julialang.org/en/v1/stdlib/Pkg/index.html):
 ```julia
-] add https://github.com/JuliaOpt/Penopt.jl.git
+] add https://github.com/jump-dev/Penopt.jl.git
 ```
 then open a terminal in the directory when Penopt is installed (find this directory by writing `using Penopt; pathof(Penopt)` in a Julia session).
 ```
