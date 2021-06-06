@@ -68,14 +68,14 @@ using JuMP
 import Penopt
 
 model = Model(Penopt.Optimizer)
-set_optimizer_attribute(model, "LS", 1)
-set_optimizer_attribute(model, "DIMACS", 0)
-set_optimizer_attribute(model, "P0", 0.1)
+set_optimizer_attribute(model, "PBM_EPS", 1e-5)
 set_optimizer_attribute(model, "PRECISION_2", 1e-6)
+
 @variable(model, x[1:3])
 @objective(model, Min, (x[1] - x[2])^2 / 2 + x[3])
 @constraint(model, -0.5 <= x[1] <= 2.0)
 @constraint(model, -3.0 <= x[2] <= 7.0)
+
 A0 = [-10  -0.5 -2
       -0.5  4.5  0
       -2    0    0]
@@ -89,12 +89,9 @@ K12 = [0    0    2
        0   -5.5  3
        2    3    0]
 @constraint(model, Symmetric(-A0 - x[1] * A1 - x[2] * A2 - x[1] * x[2] * K12 + x[3] * Matrix(I, 3, 3)) in PSDCone())
-optimize!(model)
 
+optimize!(model)
 println(solution_summary(model))
-@show MOI.get(model, Penopt.NumberOfOuterIterations())
-@show MOI.get(model, Penopt.NumberOfNewtonSteps())
-@show MOI.get(model, Penopt.NumberOfLinesearchSteps())
 ```
 
 ## Accessing Penopt-specific attributes via JuMP

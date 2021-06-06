@@ -2,8 +2,8 @@ import LinearAlgebra
 
 const IOPTIONS = String[
     "DEF",
-    "PBM MAX ITER",
-    "UM MAX ITER",
+    "PBM_MAX_ITER",
+    "UM_MAX_ITER",
     "OUTPUT",
     "DENSE",
     "LS",
