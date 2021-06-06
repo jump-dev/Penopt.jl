@@ -88,7 +88,7 @@ A2 = [-1.8 -0.1 -0.4
 K12 = [0    0    2
        0   -5.5  3
        2    3    0]
-@constraint(model, Symmetric(A0 + x[1] * A1 + x[2] * A2 + x[1] * x[2] * K12 - x[3] * Matrix(I, 3, 3)) in PSDCone())
+@constraint(model, Symmetric(-A0 - x[1] * A1 - x[2] * A2 - x[1] * x[2] * K12 + x[3] * Matrix(I, 3, 3)) in PSDCone())
 optimize!(model)
 
 println(solution_summary(model))

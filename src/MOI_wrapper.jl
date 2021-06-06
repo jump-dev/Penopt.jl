@@ -336,7 +336,8 @@ function push_a!(optimizer, cur_idx, idx, output_index, value)
         push!(optimizer.ai_nzs, 0)
     end
     optimizer.ai_nzs[end] += 1
-    push!(optimizer.ai_val, value)
+    # Penbmi expects `⪯ 0` and MOI gives `⪰ 0` so we multiply by `-1`.
+    push!(optimizer.ai_val, -value)
     col, row = _col_row(output_index)
     push!(optimizer.ai_col, col - 1)
     push!(optimizer.ai_row, row - 1)
@@ -394,7 +395,8 @@ function MOI.add_constraint(
             push!(optimizer.ki_nzs, 0)
         end
         optimizer.ki_nzs[end] += 1
-        push!(optimizer.ki_val, sterm.coefficient)
+        # Penbmi expects `⪯ 0` and MOI gives `⪰ 0` so we multiply by `-1`.
+        push!(optimizer.ki_val, -sterm.coefficient)
         col, row = _col_row(term.output_index)
         push!(optimizer.ki_col, col - 1)
         push!(optimizer.ki_row, row - 1)

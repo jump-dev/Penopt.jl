@@ -81,12 +81,12 @@ function example3()
         MOI.add_constraint(optimizer, -1.0fx[2], MOI.LessThan(3.0))
         MOI.add_constraint(optimizer,  1.0fx[2], MOI.LessThan(7.0))
         func = MOI.Utilities.vectorize(MOI.ScalarQuadraticFunction{Cdouble}[
-            -10.0 + 9.0fx[1] - 1.8fx[2] - 1.0fx[3],
-             -0.5 + 0.5fx[1] - 0.1fx[2],
-              4.5            + 1.2fx[2] - 1.0fx[3] - 5.5fx[1] * fx[2],
-             -2.0            - 0.4fx[2]            + 2.0fx[1] * fx[2],
-                  - 3.0fx[1] - 1.0fx[2]            + 3.0fx[1] * fx[2],
-                  - 1.0fx[1]            - 1.0fx[3],
+            10.0 - 9.0fx[1] + 1.8fx[2] + 1.0fx[3],
+             0.5 - 0.5fx[1] + 0.1fx[2],
+            -4.5            - 1.2fx[2] + 1.0fx[3] + 5.5fx[1] * fx[2],
+             2.0            + 0.4fx[2]            - 2.0fx[1] * fx[2],
+                   3.0fx[1] + 1.0fx[2]            - 3.0fx[1] * fx[2],
+                   1.0fx[1]            + 1.0fx[3],
         ])
         MOI.add_constraint(optimizer, func, MOI.PositiveSemidefiniteConeTriangle(3))
 
@@ -121,9 +121,9 @@ function example3()
 
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ fx_expected rtol=1e-4
         @test MOI.get.(optimizer, MOI.VariablePrimal(), x) ≈ x_expected rtol=1e-4
-        @test MOI.get(model, Penopt.NumberOfOuterIterations()) == 13
-        @test MOI.get(model, Penopt.NumberOfNewtonSteps()) == 42
-        @test MOI.get(model, Penopt.NumberOfLinesearchSteps()) == 93
+        @test MOI.get(optimizer, Penopt.NumberOfOuterIterations()) == 13
+        @test MOI.get(optimizer, Penopt.NumberOfNewtonSteps()) == 42
+        @test MOI.get(optimizer, Penopt.NumberOfLinesearchSteps()) == 93
     end
 end
 
