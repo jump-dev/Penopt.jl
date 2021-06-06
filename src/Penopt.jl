@@ -8,6 +8,14 @@ else
     error("Penopt not properly installed. Please run Pkg.build(\"Penopt\") and restart julia")
 end
 
+const DEFAULT_IOPTIONS = Cint[1, 50, 100, 2, 0, 0, 0, 0, 0, 0, 1, 0]
+const DEFAULT_FOPTIONS = Cdouble[1.0, 0.7, 0.1, 1e-7, 1e-6, 1e-14, 1e-2, 1.1, 0.0, 1.0, 1.0e-7, 5.0e-2]
+
+
+import MathOptInterface
+const MOI = MathOptInterface
+_tridim(n) = MOI.dimension(MOI.PositiveSemidefiniteConeTriangle(n))
+
 """
     penbmi()
 
@@ -58,7 +66,7 @@ function penbmi(
     info = Ref{Cint}(zero(Cint))
     # array reserved for initial (factors for) dual variables (input)
     u0 = C_NULL
-    uoutput = zeros(Cdouble, constr + sum(d -> div(d * (d + 1), 2), msizes))
+    uoutput = zeros(Cdouble, constr + sum(_tridim, msizes))
     ccall((:penbmi, libpenbmi), Cint, (
         Cint, Cint, Cint, Ptr{Cint},
         Ref{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble},
@@ -82,5 +90,7 @@ function penbmi(
         iresults, fresults, info)
     return fx[], x0, uoutput, iresults, fresults, info[]
 end
+
+include("MOI_wrapper.jl")
 
 end # module
