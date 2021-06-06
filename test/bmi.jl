@@ -1,7 +1,7 @@
 module TestBMI
 
 # Example taken from `PENBMI2.1/c/driver_bmi_c.c`.
-# Similar to Example 3 of http://www.penopt.com/doc/penbmi2_1.pdf except that we add (x1 - x2)^2/2 in the objective
+# Similar to Example 3 of http://www.penopt.com/doc/penbmi2_1.pdf except that we add (x1 - x2)^2 in the objective
 using Test
 using Penopt
 
@@ -78,7 +78,7 @@ function test_example3()
         MOI.set(optimizer, MOI.RawParameter("PRECISION_2"), 1e-6)
         x = MOI.add_variables(optimizer, 3)
         fx = MOI.SingleVariable.(x)
-        obj = (1.0fx[1] - 1.0fx[2])^2 / 2.0 + 1.0fx[3]
+        obj = (1.0fx[1] - 1.0fx[2])^2 + 1.0fx[3]
         MOI.set(optimizer, MOI.ObjectiveSense(), MOI.MIN_SENSE)
         MOI.set(optimizer, MOI.ObjectiveFunction{typeof(obj)}(), obj)
         MOI.add_constraint(optimizer, -1.0fx[1], MOI.LessThan(0.5))

@@ -175,16 +175,18 @@ function MOI.empty!(optimizer::Optimizer)
     return
 end
 
+MOI.Utilities.supports_default_copy_to(::Optimizer, names::Bool) = !names
+function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; kwargs...)
+    return MOI.Utilities.automatic_copy_to(dest, src; kwargs...)
+end
+
 function MOI.add_variable(optimizer::Optimizer)
     push!(optimizer.x0, 0.0)
     push!(optimizer.fobj, 0.0)
     return MOI.VariableIndex(length(optimizer.x0))
 end
 
-function MOI.supports(
-    ::Optimizer,
-    ::MOI.ObjectiveSense,
-)
+function MOI.supports(::Optimizer, ::MOI.ObjectiveSense)
     return true
 end
 function MOI.set(
@@ -216,9 +218,23 @@ function MOI.set(
 end
 function MOI.supports(
     ::Optimizer,
-    ::MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Cdouble}},
+    ::MOI.ObjectiveFunction{
+        <:Union{
+            MOI.ScalarAffineFunction{Cdouble},
+            MOI.ScalarQuadraticFunction{Cdouble},
+        },
+    },
 )
     return true
+end
+# TODO remove once we have the objective bridge aff -> quad
+function MOI.set(
+    optimizer::Optimizer,
+    ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
+    func::MOI.ScalarAffineFunction{Cdouble},
+)
+    quad = convert(MOI.ScalarQuadraticFunction{Cdouble}, func)
+    return MOI.set(optimizer, MOI.ObjectiveFunction{typeof(quad)}(), quad)
 end
 function MOI.set(
     optimizer::Optimizer,
@@ -229,7 +245,8 @@ function MOI.set(
     optimizer.objective_constant = func.constant
     fill!(optimizer.fobj, 0.0)
     for term in func.affine_terms
-        optimizer.fobj[term.variable_index.value] = optimizer.objective_sign * term.coefficient
+        optimizer.fobj[term.variable_index.value] =
+            optimizer.objective_sign * term.coefficient
     end
     empty!(optimizer.q_val)
     empty!(optimizer.q_col)
@@ -240,7 +257,7 @@ function MOI.set(
         if col < row
             col, row = row, col
         end
-        push!(optimizer.q_val, optimizer.objective_sign * term.coefficient)
+        push!(optimizer.q_val, optimizer.objective_sign * term.coefficient / 2)
         push!(optimizer.q_col, col - 1)
         push!(optimizer.q_row, row - 1)
     end
@@ -420,7 +437,13 @@ function MOI.add_constraint(
     func::MOI.VectorAffineFunction{Cdouble},
     set::MOI.PositiveSemidefiniteConeTriangle,
 )
-    quad = convert(MOI.VectorQuadraticFunction{Cdouble}, func)
+    # TODO add it in MOI
+    #quad = convert(MOI.VectorQuadraticFunction{Cdouble}, func)
+    quad = MOI.VectorQuadraticFunction{Cdouble}(
+        func.terms,
+        MOI.VectorQuadraticTerm{Cdouble}[],
+        func.constants,
+    )
     ci = MOI.add_constraint(optimizer, quad, set)
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(ci.value)
 end
@@ -539,10 +562,14 @@ end
 
 function MOI.get(optimizer::Optimizer, attr::MOI.ObjectiveValue)
     MOI.check_result_index_bounds(optimizer, attr)
-    return optimizer.objective_sign * optimizer.fx + optimizer.objective_constant
+    return optimizer.objective_sign * optimizer.fx +
+           optimizer.objective_constant
 end
 
-function MOI.get(optimizer::Optimizer, attr::Union{MOI.PrimalStatus, MOI.DualStatus})
+function MOI.get(
+    optimizer::Optimizer,
+    attr::Union{MOI.PrimalStatus,MOI.DualStatus},
+)
     if attr.N > MOI.get(optimizer, MOI.ResultCount())
         return MOI.NO_SOLUTION
     end
@@ -554,7 +581,11 @@ function MOI.get(optimizer::Optimizer, attr::Union{MOI.PrimalStatus, MOI.DualSta
         return MOI.UNKNOWN_RESULT_STATUS
     end
 end
-function MOI.get(optimizer::Optimizer, attr::MOI.VariablePrimal, vi::MOI.VariableIndex)
+function MOI.get(
+    optimizer::Optimizer,
+    attr::MOI.VariablePrimal,
+    vi::MOI.VariableIndex,
+)
     MOI.check_result_index_bounds(optimizer, attr)
     return optimizer.x[vi.value]
 end
