@@ -60,7 +60,7 @@ for a list and description of allowable parameters.
 
 For instance, here is how to solve the example of given in
 `PENBMI2.1/c/driver_bmi_c.c` with JuMP.
-This is Example 3 of the [Penbmi Documentation](http://www.penopt.com/doc/penbmi2_1.pdf) except that we add `(x[1] - x[2])^2/2` in the objective.
+This is Example 3 of the [Penbmi Documentation](http://www.penopt.com/doc/penbmi2_1.pdf) except that we add `(x[1] - x[2])^2` in the objective.
 
 ```julia
 using LinearAlgebra
@@ -72,7 +72,7 @@ set_optimizer_attribute(model, "PBM_EPS", 1e-5)
 set_optimizer_attribute(model, "PRECISION_2", 1e-6)
 
 @variable(model, x[1:3])
-@objective(model, Min, (x[1] - x[2])^2 / 2 + x[3])
+@objective(model, Min, (x[1] - x[2])^2 + x[3])
 @constraint(model, -0.5 <= x[1] <= 2.0)
 @constraint(model, -3.0 <= x[2] <= 7.0)
 
