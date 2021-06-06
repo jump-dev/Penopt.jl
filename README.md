@@ -24,7 +24,7 @@ $ gcc  -Wl,--no-undefined -shared -lm -lgfortran -lopenblas -llapack -o libpenbm
 ```
 This will create a shared library `libpenbmi.so` in the directory `deps/usr/lib`.
 Then create the following file `deps/deps.jl`:
-```
+```julia
 import Libdl
 const libpenbmi = joinpath(dirname(@__FILE__), "usr/lib/libpenbmi.so")
 function check_deps()
