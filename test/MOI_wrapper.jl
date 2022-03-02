@@ -24,7 +24,7 @@ const CACHED = MOI.Utilities.CachingOptimizer(
     BRIDGED,
 )
 
-const CONFIG = MOI.Test.Config(
+const CONFIG = MOI.DeprecatedTest.Config(
     atol = 2e-4,
     rtol = 2e-4,
     duals = false,
@@ -39,8 +39,7 @@ function test_SolverName()
 end
 
 function test_supports_default_copy_to()
-    @test MOI.supports_incremental_interface(OPTIMIZER, false)
-    @test !MOI.supports_incremental_interface(OPTIMIZER, true)
+    @test MOI.supports_incremental_interface(OPTIMIZER)
 end
 
 function test_unittest()
@@ -50,9 +49,9 @@ function test_unittest()
     # With `P0 = 0.01`, it seems to work better:
     MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-2)
     MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
-    # Test all the functions included in dictionary `MOI.Test.unittests`,
+    # Test all the functions included in dictionary `MOI.DeprecatedTest.unittests`,
     # except functions "number_threads" and "solve_qcp_edge_cases."
-    MOI.Test.unittest(
+    MOI.DeprecatedTest.unittest(
         CACHED,
         CONFIG,
         [
@@ -83,7 +82,7 @@ end
 function test_contlinear()
     MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-3)
     MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
-    MOI.Test.contlineartest(CACHED, CONFIG, [
+    MOI.DeprecatedTest.contlineartest(CACHED, CONFIG, [
         # Infeasible
         "linear8a", "linear12",
         # Unbounded
@@ -96,7 +95,7 @@ function test_contlinear()
 end
 
 function test_contquadratictest()
-    MOI.Test.contquadratictest(CACHED, CONFIG, [
+    MOI.DeprecatedTest.contquadratictest(CACHED, CONFIG, [
         # Bridge fails since it's nonconvex
         "socp", "ncqcp",
         # `ConstraintPrimal` not implemented
@@ -107,7 +106,7 @@ end
 function test_contconic()
     MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-4)
     MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
-    MOI.Test.contconictest(CACHED, CONFIG, [
+    MOI.DeprecatedTest.contconictest(CACHED, CONFIG, [
         # Infeasible
         "norminf2", "normone2", "lin3", "lin4", "soc3", "rotatedsoc2",
         # Missing bridges
@@ -118,7 +117,7 @@ function test_contconic()
 end
 
 function test_default_status_test()
-    MOI.Test.default_status_test(OPTIMIZER)
+    MOI.DeprecatedTest.default_status_test(OPTIMIZER)
 end
 
 # This function runs all functions in this module starting with `test_`.
