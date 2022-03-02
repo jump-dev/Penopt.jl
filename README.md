@@ -46,12 +46,12 @@ You can test the installation with `using Pkg; Pkg.test("Penopt")` in a Julia se
 We highly recommend that you use the *Penopt.jl* package with higher level packages such as
 [JuMP.jl](https://github.com/jump-dev/JuMP.jl).
 
-This can be done using the ``Gurobi.Optimizer`` object. Here is how to create a
-*JuMP* model that uses Gurobi as the solver.
+This can be done using the ``Penopt.Optimizer`` object. Here is how to create a
+*JuMP* model that uses Penopt as the solver.
 ```julia
-using JuMP, Gurobi
+using JuMP, Penopt
 
-model = Model(Gurobi.Optimizer)
+model = Model(Penopt.Optimizer)
 set_optimizer_attribute(model, "PBM_MAX_ITER", 100)
 set_optimizer_attribute(model, "TR_MODE", 1)
 ```
