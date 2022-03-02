@@ -106,10 +106,10 @@ end
 
 MOI.get(::Optimizer, ::MOI.SolverName) = "Penbmi"
 
-function MOI.supports(optimizer::Optimizer, param::MOI.RawParameter)
+function MOI.supports(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     return param.name in IOPTIONS || param.name in FOPTIONS
 end
-function MOI.set(optimizer::Optimizer, param::MOI.RawParameter, value)
+function MOI.set(optimizer::Optimizer, param::MOI.RawOptimizerAttribute, value)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         optimizer.ioptions[i] = value
@@ -122,7 +122,7 @@ function MOI.set(optimizer::Optimizer, param::MOI.RawParameter, value)
     end
     return throw(MOI.UnsupportedAttribute(param))
 end
-function MOI.get(optimizer::Optimizer, param::MOI.RawParameter)
+function MOI.get(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         return optimizer.ioptions[i]
@@ -175,9 +175,9 @@ function MOI.empty!(optimizer::Optimizer)
     return
 end
 
-MOI.Utilities.supports_default_copy_to(::Optimizer, names::Bool) = !names
-function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; kwargs...)
-    return MOI.Utilities.automatic_copy_to(dest, src; kwargs...)
+MOI.supports_incremental_interface(::Optimizer) = true
+function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
+    return MOI.Utilities.default_copy_to(dest, src)
 end
 
 function MOI.add_variable(optimizer::Optimizer)
@@ -245,15 +245,15 @@ function MOI.set(
     optimizer.objective_constant = func.constant
     fill!(optimizer.fobj, 0.0)
     for term in func.affine_terms
-        optimizer.fobj[term.variable_index.value] =
+        optimizer.fobj[term.variable.value] =
             optimizer.objective_sign * term.coefficient
     end
     empty!(optimizer.q_val)
     empty!(optimizer.q_col)
     empty!(optimizer.q_row)
     for term in func.quadratic_terms
-        col = term.variable_index_1.value
-        row = term.variable_index_2.value
+        col = term.variable_1.value
+        row = term.variable_2.value
         if col < row
             col, row = row, col
         end
@@ -312,7 +312,7 @@ function MOI.add_constraint(
     func = MOI.Utilities.canonical(func)
     push!(optimizer.bi_dim, length(func.terms))
     for term in func.terms
-        push!(optimizer.bi_idx, term.variable_index.value - 1)
+        push!(optimizer.bi_idx, term.variable.value - 1)
         push!(optimizer.bi_val, term.coefficient)
     end
     push!(optimizer.ci, set.upper)
@@ -360,6 +360,35 @@ function push_a!(optimizer, cur_idx, idx, output_index, value)
     push!(optimizer.ai_row, row - 1)
     return cur_idx
 end
+
+function _sort_and_compress!(x::AbstractVector, by, keep, combine)
+    if length(x) > 0
+        sort!(
+            x,
+            QuickSort,
+            Base.Order.ord(isless, by, false, Base.Sort.Forward),
+        )
+        i1 = firstindex(x)
+        for i2 in eachindex(x)[2:end]
+            if by(x[i1]) == by(x[i2])
+                x[i1] = combine(x[i1], x[i2])
+            else
+                if !keep(x[i1])
+                    x[i1] = x[i2]
+                else
+                    x[i1+1] = x[i2]
+                    i1 += 1
+                end
+            end
+        end
+        if !keep(x[i1])
+            i1 -= 1
+        end
+        resize!(x, i1)
+    end
+    return x
+end
+
 function MOI.add_constraint(
     optimizer::Optimizer,
     func::MOI.VectorQuadraticFunction{Cdouble},
@@ -374,7 +403,7 @@ function MOI.add_constraint(
         end
     end
     affine = copy(func.affine_terms)
-    MOI.Utilities.sort_and_compress!(
+    _sort_and_compress!(
         affine,
         _term_indices,
         t -> !iszero(MOI.coefficient(t)),
@@ -384,14 +413,14 @@ function MOI.add_constraint(
         cur_idx = push_a!(
             optimizer,
             cur_idx,
-            term.scalar_term.variable_index.value,
+            term.scalar_term.variable.value,
             term.output_index,
             term.scalar_term.coefficient,
         )
     end
     push!(optimizer.ki_dim, 0)
     quad = copy(func.quadratic_terms)
-    MOI.Utilities.sort_and_compress!(
+    _sort_and_compress!(
         quad,
         _term_indices,
         t -> !iszero(MOI.coefficient(t)),
@@ -401,8 +430,8 @@ function MOI.add_constraint(
     curj_idx = 0
     for term in quad
         sterm = term.scalar_term
-        i_idx = sterm.variable_index_1.value
-        j_idx = sterm.variable_index_2.value
+        i_idx = sterm.variable_1.value
+        j_idx = sterm.variable_2.value
         if curi_idx != i_idx || curj_idx != j_idx
             curi_idx = i_idx
             curj_idx = j_idx
@@ -440,8 +469,8 @@ function MOI.add_constraint(
     # TODO add it in MOI
     #quad = convert(MOI.VectorQuadraticFunction{Cdouble}, func)
     quad = MOI.VectorQuadraticFunction{Cdouble}(
-        func.terms,
         MOI.VectorQuadraticTerm{Cdouble}[],
+        func.terms,
         func.constants,
     )
     ci = MOI.add_constraint(optimizer, quad, set)
@@ -490,7 +519,7 @@ function MOI.optimize!(optimizer::Optimizer)
     )
 end
 
-function MOI.get(optimizer::Optimizer, ::MOI.SolveTime)
+function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
     return convert(Float64, optimizer.iresults[4])
 end
 const INFO = String[
@@ -570,7 +599,7 @@ function MOI.get(
     optimizer::Optimizer,
     attr::Union{MOI.PrimalStatus,MOI.DualStatus},
 )
-    if attr.N > MOI.get(optimizer, MOI.ResultCount())
+    if attr.result_index > MOI.get(optimizer, MOI.ResultCount())
         return MOI.NO_SOLUTION
     end
     s = optimizer.info

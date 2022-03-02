@@ -71,11 +71,11 @@ function test_example3()
 
     @testset "MOI" begin
         optimizer = Penopt.Optimizer()
-        MOI.set(optimizer, MOI.RawParameter("OUTPUT"), 0)
-        MOI.set(optimizer, MOI.RawParameter("LS"), 1)
-        MOI.set(optimizer, MOI.RawParameter("DIMACS"), 0)
-        MOI.set(optimizer, MOI.RawParameter("PBM_EPS"), 1e-5)
-        MOI.set(optimizer, MOI.RawParameter("PRECISION_2"), 1e-6)
+        MOI.set(optimizer, MOI.RawOptimizerAttribute("OUTPUT"), 0)
+        MOI.set(optimizer, MOI.RawOptimizerAttribute("LS"), 1)
+        MOI.set(optimizer, MOI.RawOptimizerAttribute("DIMACS"), 0)
+        MOI.set(optimizer, MOI.RawOptimizerAttribute("PBM_EPS"), 1e-5)
+        MOI.set(optimizer, MOI.RawOptimizerAttribute("PRECISION_2"), 1e-6)
         x = MOI.add_variables(optimizer, 3)
         fx = MOI.SingleVariable.(x)
         obj = (1.0fx[1] - 1.0fx[2])^2 + 1.0fx[3]
