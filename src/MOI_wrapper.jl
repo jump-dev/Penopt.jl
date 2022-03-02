@@ -106,10 +106,10 @@ end
 
 MOI.get(::Optimizer, ::MOI.SolverName) = "Penbmi"
 
-function MOI.supports(optimizer::Optimizer, param::MOI.RawParameter)
+function MOI.supports(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     return param.name in IOPTIONS || param.name in FOPTIONS
 end
-function MOI.set(optimizer::Optimizer, param::MOI.RawParameter, value)
+function MOI.set(optimizer::Optimizer, param::MOI.RawOptimizerAttribute, value)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         optimizer.ioptions[i] = value
@@ -122,7 +122,7 @@ function MOI.set(optimizer::Optimizer, param::MOI.RawParameter, value)
     end
     return throw(MOI.UnsupportedAttribute(param))
 end
-function MOI.get(optimizer::Optimizer, param::MOI.RawParameter)
+function MOI.get(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         return optimizer.ioptions[i]
@@ -175,7 +175,7 @@ function MOI.empty!(optimizer::Optimizer)
     return
 end
 
-MOI.Utilities.supports_default_copy_to(::Optimizer, names::Bool) = !names
+MOI.supports_incremental_interface(::Optimizer, copy_names::Bool) = !copy_names
 function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; kwargs...)
     return MOI.Utilities.automatic_copy_to(dest, src; kwargs...)
 end
@@ -490,7 +490,7 @@ function MOI.optimize!(optimizer::Optimizer)
     )
 end
 
-function MOI.get(optimizer::Optimizer, ::MOI.SolveTime)
+function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
     return convert(Float64, optimizer.iresults[4])
 end
 const INFO = String[

@@ -10,8 +10,8 @@ const MOI = MathOptInterface
 const OPTIMIZER_CONSTRUCTOR = MOI.OptimizerWithAttributes(
     Penopt.Optimizer,
     MOI.Silent() => true,
-    #"PBM_EPS" => 1e-4,
-    #"PRECISION_2" => 1e-4,
+    "PBM_EPS" => 1.0e-4,
+    "P0" => 0.01,
 )
 const OPTIMIZER = MOI.instantiate(OPTIMIZER_CONSTRUCTOR)
 
@@ -24,9 +24,9 @@ const CACHED = MOI.Utilities.CachingOptimizer(
     BRIDGED,
 )
 
-const CONFIG = MOI.Test.TestConfig(
-    atol = 1e-6,
-    rtol = 1e-6,
+const CONFIG = MOI.Test.Config(
+    atol = 2e-4,
+    rtol = 2e-4,
     duals = false,
     infeas_certificates = false,
     optimal_status = MOI.LOCALLY_SOLVED,
@@ -34,18 +34,22 @@ const CONFIG = MOI.Test.TestConfig(
     query = false,
 )
 
-#TestPenbmi.MOI.Test.solve_affine_lessthan(TestPenbmi.CACHED, TestPenbmi.CONFIG)
-
 function test_SolverName()
     @test MOI.get(OPTIMIZER, MOI.SolverName()) == "Penbmi"
 end
 
 function test_supports_default_copy_to()
-    @test MOI.Utilities.supports_default_copy_to(OPTIMIZER, false)
-    @test !MOI.Utilities.supports_default_copy_to(OPTIMIZER, true)
+    @test MOI.supports_incremental_interface(OPTIMIZER, false)
+    @test !MOI.supports_incremental_interface(OPTIMIZER, true)
 end
 
 function test_unittest()
+    # With `P0 = 1.1` (default)
+    # solve_affine_greaterthan needs > 1.6e-1
+    # solve_affine_lessthan needs < 2.0e-1
+    # With `P0 = 0.01`, it seems to work better:
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-2)
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
     # Test all the functions included in dictionary `MOI.Test.unittests`,
     # except functions "number_threads" and "solve_qcp_edge_cases."
     MOI.Test.unittest(
@@ -54,16 +58,17 @@ function test_unittest()
         [
             # Attribute not supported
             "number_threads", "time_limit_sec",
-            # Does not converge since everything is at zero and it uses a relative tolerance ?
+            # TODO Seems to converge to a local infeasible solution
+            "solve_start_soc",
+            # FIXME Does not converge since everything is at zero and it uses a relative tolerance ?
             "solve_duplicate_terms_obj", "solve_time", "solve_constant_obj", "solve_affine_equalto", "raw_status_string",
+            "solve_affine_deletion_edge_cases", "solve_result_index", "solve_singlevariable_obj",
             # Binary variables not supported
             "solve_integer_edge_cases", "solve_objbound_edge_cases",
             "solve_zero_one_with_bounds_1",
             "solve_zero_one_with_bounds_2",
             "solve_zero_one_with_bounds_3",
             # `ConstraintPrimal` not implemented
-            "solve_affine_lessthan", "solve_affine_equalto", "solve_affine_interval", "solve_affine_greaterthan",
-            "solve_affine_deletion_edge_cases", "solve_result_index", "solve_blank_obj", "solve_singlevariable_obj",
             "solve_duplicate_terms_scalar_affine", "solve_duplicate_terms_vector_affine",
             "solve_with_upperbound", "solve_with_lowerbound",
             # `ConstraintFunction` not implemented but needed by bridge
@@ -75,9 +80,20 @@ function test_unittest()
 end
 
 # TODO
-#function test_contlinear()
-#    MOI.Test.contlineartest(BRIDGED, CONFIG)
-#end
+function test_contlinear()
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-3)
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
+    MOI.Test.contlineartest(CACHED, CONFIG, [
+        # Infeasible
+        "linear8a", "linear12",
+        # Unbounded
+        "linear8b", "linear8c",
+        # FIXME Does not converge since everything is at zero and it uses a relative tolerance ?
+        "linear6", "linear4", "linear7", "linear15",
+        # ITERATION_LIMIT
+        "linear9",
+    ])
+end
 
 function test_contquadratictest()
     MOI.Test.contquadratictest(CACHED, CONFIG, [
@@ -88,10 +104,18 @@ function test_contquadratictest()
     ])
 end
 
-# TODO
-#function test_contconic()
-#    MOI.Test.contlineartest(BRIDGED, CONFIG)
-#end
+function test_contconic()
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("PBM_EPS"), 1.0e-4)
+    MOI.set(CACHED, MOI.RawOptimizerAttribute("P0"), 1.0e-2)
+    MOI.Test.contconictest(CACHED, CONFIG, [
+        # Infeasible
+        "norminf2", "normone2", "lin3", "lin4", "soc3", "rotatedsoc2",
+        # Missing bridges
+        "rootdets",
+        # Does not support power and exponential cone
+        "pow", "dualpow", "logdet", "exp", "dualexp", "relentr",
+    ])
+end
 
 function test_default_status_test()
     MOI.Test.default_status_test(OPTIMIZER)
