@@ -77,21 +77,20 @@ function test_example3()
         MOI.set(optimizer, MOI.RawOptimizerAttribute("PBM_EPS"), 1e-5)
         MOI.set(optimizer, MOI.RawOptimizerAttribute("PRECISION_2"), 1e-6)
         x = MOI.add_variables(optimizer, 3)
-        fx = MOI.SingleVariable.(x)
-        obj = (1.0fx[1] - 1.0fx[2])^2 + 1.0fx[3]
+        obj = (1.0x[1] - 1.0x[2])^2 + 1.0x[3]
         MOI.set(optimizer, MOI.ObjectiveSense(), MOI.MIN_SENSE)
         MOI.set(optimizer, MOI.ObjectiveFunction{typeof(obj)}(), obj)
-        MOI.add_constraint(optimizer, -1.0fx[1], MOI.LessThan(0.5))
-        MOI.add_constraint(optimizer,  1.0fx[1], MOI.LessThan(2.0))
-        MOI.add_constraint(optimizer, -1.0fx[2], MOI.LessThan(3.0))
-        MOI.add_constraint(optimizer,  1.0fx[2], MOI.LessThan(7.0))
+        MOI.add_constraint(optimizer, -1.0x[1], MOI.LessThan(0.5))
+        MOI.add_constraint(optimizer,  1.0x[1], MOI.LessThan(2.0))
+        MOI.add_constraint(optimizer, -1.0x[2], MOI.LessThan(3.0))
+        MOI.add_constraint(optimizer,  1.0x[2], MOI.LessThan(7.0))
         func = MOI.Utilities.vectorize(MOI.ScalarQuadraticFunction{Cdouble}[
-            10.0 - 9.0fx[1] + 1.8fx[2] + 1.0fx[3],
-             0.5 - 0.5fx[1] + 0.1fx[2],
-            -4.5            - 1.2fx[2] + 1.0fx[3] + 5.5fx[1] * fx[2],
-             2.0            + 0.4fx[2]            - 2.0fx[1] * fx[2],
-                   3.0fx[1] + 1.0fx[2]            - 3.0fx[1] * fx[2],
-                   1.0fx[1]            + 1.0fx[3],
+            10.0 - 9.0x[1] + 1.8x[2] + 1.0x[3],
+             0.5 - 0.5x[1] + 0.1x[2],
+            -4.5           - 1.2x[2] + 1.0x[3] + 5.5x[1] * x[2],
+             2.0           + 0.4x[2]           - 2.0x[1] * x[2],
+                   3.0x[1] + 1.0x[2]           - 3.0x[1] * x[2],
+                   1.0x[1]           + 1.0x[3],
         ])
         MOI.add_constraint(optimizer, func, MOI.PositiveSemidefiniteConeTriangle(3))
 
