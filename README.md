@@ -1,5 +1,8 @@
 # Penopt.jl
 
+**This repository is still under development. It is not a registered
+Julia package, and has not been tested on macOS or Windows.**
+
 [Penopt.jl](https://github.com/jump-dev/Penopt.jl) is a wrapper for the
 [Penopt Optimizer](http://www.penopt.com/).
 
