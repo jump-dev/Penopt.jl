@@ -1,0 +1,4 @@
+[deps]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+Penopt = "fb8f6f4e-b8f1-11e9-2b95-bdba3fec731e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
