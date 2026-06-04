@@ -18,9 +18,10 @@ jobs:
           - version: '1'
             os: ubuntu-latest
             arch: default
+          # PENSDP only ships an Intel macOS binary, so pin to an Intel runner.
           - version: '1'
-            os: macOS-latest
-            arch: default
+            os: macos-13
+            arch: x64
           - version: '1'
             os: windows-latest
             arch: default
