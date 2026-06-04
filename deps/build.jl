@@ -70,6 +70,18 @@ function _download_and_extract()
     return extract_dir
 end
 
+function _find_macos_gfortran()
+    for name in ("gfortran", "gfortran-14", "gfortran-13", "gfortran-12", "gfortran-11")
+        p = Sys.which(name)
+        p === nothing || return p
+    end
+    error(
+        "No `gfortran` found on PATH. The macOS build needs Homebrew's " *
+        "gfortran for libquadmath and the libgcc soft-float helpers used " *
+        "by `libgfortran_mac.a`. Install it with `brew install gcc`.",
+    )
+end
+
 # Build a shared library that exports the `pensdp` symbol so that it can be
 # loaded by Julia via `Libdl.dlopen` and called with `ccall`.
 function _build_shared_library(extract_dir)
@@ -94,9 +106,16 @@ function _build_shared_library(extract_dir)
     elseif os == :apple
         output = joinpath(LIB_DIR, "libpensdp.dylib")
         libgfortran_mac = joinpath(lib_src, "libgfortran_mac.a")
-        cmd = `gcc -dynamiclib -o $(output)
+        # `libgfortran_mac.a` references libquadmath (`_strtoflt128`,
+        # `_quadmath_snprintf`, ...) and the libgcc soft-float helpers
+        # (`___multf3`, `___subtf3`, ...) used for `long double` arithmetic.
+        # Apple's clang ships neither, so link via Homebrew `gfortran`, which
+        # adds its own libgcc/libquadmath search paths.
+        gfortran = _find_macos_gfortran()
+        cmd = `$(gfortran) -shared -dynamiclib -o $(output)
                    -Wl,-force_load,$(libpensdp_a)
                    $(libgfortran_mac)
+                   -lquadmath
                    -framework Accelerate
                    -lpthread`
         @info "Linking shared library" cmd
