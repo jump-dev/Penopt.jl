@@ -23,7 +23,8 @@ function runtests()
 end
 
 function test_solver_name()
-    @test MOI.get(Penopt.Optimizer(), MOI.SolverName()) == "Penbmi"
+    expected = Penopt.has_penbmi() ? "Penbmi" : "Pensdp"
+    @test MOI.get(Penopt.Optimizer(), MOI.SolverName()) == expected
 end
 
 function test_supports_default_copy_to()
@@ -48,6 +49,17 @@ function test_runtests()
     MOI.set(model, MOI.Silent(), true)
     MOI.set(model, MOI.RawOptimizerAttribute("PBM_EPS"), 1e-2)
     MOI.set(model, MOI.RawOptimizerAttribute("P0"), 1e-2)
+    # When libpenbmi is not available, the auto-installed PENSDP cannot solve
+    # problems with a quadratic objective.
+    bmi_only = Penopt.has_penbmi() ? String[] : String[
+        "test_objective_qp_ObjectiveFunction_edge_cases",
+        "test_objective_qp_ObjectiveFunction_zero_ofdiag",
+        "test_quadratic_duplicate_terms",
+        "test_quadratic_integration",
+        "test_quadratic_nonhomogeneous",
+        # PENSDP reports OTHER_ERROR for this edge case; PENBMI handles it.
+        "test_conic_empty_matrix",
+    ]
     MOI.Test.runtests(
         model,
         MOI.Test.Config(
@@ -64,7 +76,7 @@ function test_runtests()
                 MOI.DualObjectiveValue,
             ],
         ),
-        exclude = String[
+        exclude = vcat(bmi_only, String[
             # Unable to bridge RotatedSecondOrderCone to PSD because the dimension is too small: got 2, expected >= 3.
             "test_conic_SecondOrderCone_INFEASIBLE",
             "test_constraint_PrimalStart_DualStart_SecondOrderCone",
@@ -109,7 +121,7 @@ function test_runtests()
             "test_objective_ObjectiveFunction_constant",
             "test_objective_ObjectiveFunction_duplicate_terms",
             "test_solve_result_index",
-        ],
+        ]),
     )
     return
 end

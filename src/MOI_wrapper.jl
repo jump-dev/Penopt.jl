@@ -109,7 +109,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     end
 end
 
-MOI.get(::Optimizer, ::MOI.SolverName) = "Penbmi"
+MOI.get(::Optimizer, ::MOI.SolverName) = has_penbmi() ? "Penbmi" : "Pensdp"
 
 function MOI.supports(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     return param.name in IOPTIONS || param.name in FOPTIONS
@@ -482,6 +482,9 @@ function MOI.add_constraint(
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(ci.value)
 end
 
+_is_sdp(optimizer::Optimizer) =
+    isempty(optimizer.q_val) && isempty(optimizer.ki_val)
+
 function MOI.optimize!(optimizer::Optimizer)
     ioptions = optimizer.ioptions
     if optimizer.silent
@@ -490,38 +493,66 @@ function MOI.optimize!(optimizer::Optimizer)
         ioptions[11] = 0 # DIMACS : no
     end
     optimizer.x = copy(optimizer.x0)
-    return optimizer.fx,
-    _,
-    optimizer.uoutput,
-    optimizer.iresults,
-    optimizer.fresults,
-    optimizer.info = penbmi(
-        optimizer.msizes,
-        optimizer.x,
-        optimizer.fobj,
-        optimizer.q_col,
-        optimizer.q_row,
-        optimizer.q_val,
-        optimizer.ci,
-        optimizer.bi_dim,
-        optimizer.bi_idx,
-        optimizer.bi_val,
-        optimizer.ai_dim,
-        optimizer.ai_idx,
-        optimizer.ai_nzs,
-        optimizer.ai_val,
-        optimizer.ai_col,
-        optimizer.ai_row,
-        optimizer.ki_dim,
-        optimizer.ki_idx,
-        optimizer.kj_idx,
-        optimizer.ki_nzs,
-        optimizer.ki_val,
-        optimizer.ki_col,
-        optimizer.ki_row,
-        ioptions,
-        optimizer.foptions,
-    )
+    # PENSDP (auto-installed) handles SDP. Fall back to PENBMI when the
+    # objective has a quadratic part or when there are BMI (`K`) terms.
+    if _is_sdp(optimizer) && !has_penbmi()
+        optimizer.fx,
+        _,
+        optimizer.uoutput,
+        optimizer.iresults,
+        optimizer.fresults,
+        optimizer.info = pensdp(
+            optimizer.msizes,
+            optimizer.x,
+            optimizer.fobj,
+            optimizer.ci,
+            optimizer.bi_dim,
+            optimizer.bi_idx,
+            optimizer.bi_val,
+            optimizer.ai_dim,
+            optimizer.ai_idx,
+            optimizer.ai_nzs,
+            optimizer.ai_val,
+            optimizer.ai_col,
+            optimizer.ai_row,
+            ioptions,
+            optimizer.foptions,
+        )
+    else
+        optimizer.fx,
+        _,
+        optimizer.uoutput,
+        optimizer.iresults,
+        optimizer.fresults,
+        optimizer.info = penbmi(
+            optimizer.msizes,
+            optimizer.x,
+            optimizer.fobj,
+            optimizer.q_col,
+            optimizer.q_row,
+            optimizer.q_val,
+            optimizer.ci,
+            optimizer.bi_dim,
+            optimizer.bi_idx,
+            optimizer.bi_val,
+            optimizer.ai_dim,
+            optimizer.ai_idx,
+            optimizer.ai_nzs,
+            optimizer.ai_val,
+            optimizer.ai_col,
+            optimizer.ai_row,
+            optimizer.ki_dim,
+            optimizer.ki_idx,
+            optimizer.kj_idx,
+            optimizer.ki_nzs,
+            optimizer.ki_val,
+            optimizer.ki_col,
+            optimizer.ki_row,
+            ioptions,
+            optimizer.foptions,
+        )
+    end
+    return
 end
 
 function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
