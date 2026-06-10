@@ -163,9 +163,18 @@ function _build_windows(extract_dir, lib_src)
         " \"", openblas_lib, "\"",
         " \"", f2c_lib, "\"",
     )
-    cmdline = "call \"$(vcvarsall)\" x64 >nul && $(link_cmd)"
-    @info "Linking shared library" cmdline
-    run(`cmd /c $(cmdline)`)
+    # Run via a `.bat` file rather than `cmd /c "<compound command>"`: passing
+    # a quoted compound string to `cmd /c` triggers cmd.exe's leading-quote
+    # stripping rules and fails with "is not recognized as an internal or
+    # external command".
+    bat_file = joinpath(LIB_DIR, "build_libpensdp.bat")
+    open(bat_file, "w") do io
+        println(io, "@echo off")
+        println(io, "call \"$(vcvarsall)\" x64 >nul || exit /b 1")
+        println(io, link_cmd, " || exit /b 1")
+    end
+    @info "Linking shared library" link_cmd
+    run(`cmd /c $(bat_file)`)
     return output
 end
 
