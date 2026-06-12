@@ -64,6 +64,9 @@ function _download_and_extract()
     @info "Extracting $(archive)"
     if kind == :tar
         run(`tar -xzf $(archive) -C $(DOWNLOAD_DIR)`)
+    elseif Sys.iswindows()
+        # `unzip` is not standard on Windows; use PowerShell's Expand-Archive.
+        run(`powershell -NoProfile -Command "Expand-Archive -Path '$(archive)' -DestinationPath '$(DOWNLOAD_DIR)' -Force"`)
     else
         run(`unzip -q -o $(archive) -d $(DOWNLOAD_DIR)`)
     end
@@ -75,11 +78,11 @@ end
 function _build_shared_library(extract_dir)
     mkpath(LIB_DIR)
     lib_src = joinpath(extract_dir, "lib")
-    libpensdp_a = joinpath(lib_src, "libpensdp.a")
-    isfile(libpensdp_a) || error("$(libpensdp_a) not found")
     julia_libdir = joinpath(Sys.BINDIR, Base.LIBDIR, "julia")
     os, _ = _platform()
     if os == :linux
+        libpensdp_a = joinpath(lib_src, "libpensdp.a")
+        isfile(libpensdp_a) || error("$(libpensdp_a) not found")
         output = joinpath(LIB_DIR, "libpensdp.so")
         libgoto = joinpath(lib_src, "libgoto2.a")
         isfile(libgoto) || error("$(libgoto) not found")
@@ -92,6 +95,8 @@ function _build_shared_library(extract_dir)
         run(cmd)
         return output
     elseif os == :apple
+        libpensdp_a = joinpath(lib_src, "libpensdp.a")
+        isfile(libpensdp_a) || error("$(libpensdp_a) not found")
         output = joinpath(LIB_DIR, "libpensdp.dylib")
         libgfortran_mac = joinpath(lib_src, "libgfortran_mac.a")
         cmd = `gcc -dynamiclib -o $(output)
@@ -102,13 +107,75 @@ function _build_shared_library(extract_dir)
         @info "Linking shared library" cmd
         run(cmd)
         return output
+    elseif os == :windows
+        return _build_windows(extract_dir, lib_src)
     else
-        error(
-            "Automatic build is currently implemented for Linux and macOS. " *
-            "On Windows please set `PENOPT_LIBPENBMI` (or build " *
-            "`libpensdp.dll` manually) and re-run `Pkg.build(\"Penopt\")`.",
-        )
+        error("Unsupported OS for automatic build: $(os)")
     end
+end
+
+function _find_vcvarsall()
+    vswhere = raw"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+    isfile(vswhere) || error(
+        "vswhere.exe not found at $(vswhere); cannot locate Visual Studio. " *
+        "Install Visual Studio Build Tools (with the C++ workload).",
+    )
+    vs_path = strip(read(Cmd([
+        vswhere, "-latest",
+        "-products", "*",
+        "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+        "-property", "installationPath",
+    ]), String))
+    isempty(vs_path) && error(
+        "vswhere returned no Visual Studio install with the MSVC x64 tools.",
+    )
+    vcvarsall = joinpath(vs_path, "VC", "Auxiliary", "Build", "vcvarsall.bat")
+    isfile(vcvarsall) || error("$(vcvarsall) not found")
+    return vcvarsall
+end
+
+function _build_windows(extract_dir, lib_src)
+    pensdp_lib = joinpath(lib_src, "pensdp64.lib")
+    openblas_lib = joinpath(lib_src, "libopenblas.lib")
+    f2c_lib = joinpath(lib_src, "libf2c64.lib")
+    for f in (pensdp_lib, openblas_lib, f2c_lib)
+        isfile(f) || error("$(f) not found")
+    end
+    output = joinpath(LIB_DIR, "libpensdp.dll")
+    # libpensdp.dll calls into OpenBLAS at runtime; copy the bundled DLL next
+    # to it so Windows finds it via the standard search order.
+    openblas_dll = joinpath(extract_dir, "bin", "libopenblas.dll")
+    isfile(openblas_dll) || error("$(openblas_dll) not found")
+    cp(openblas_dll, joinpath(LIB_DIR, "libopenblas.dll"); force = true)
+    # `pensdp64.lib` has no DLL exports, so we write a `.def` file listing the
+    # single C symbol we need (no name mangling on x64).
+    def_file = joinpath(LIB_DIR, "libpensdp.def")
+    open(def_file, "w") do io
+        println(io, "EXPORTS")
+        println(io, "    pensdp")
+    end
+    vcvarsall = _find_vcvarsall()
+    link_cmd = string(
+        "link.exe /DLL /MACHINE:X64",
+        " /OUT:\"", output, "\"",
+        " /DEF:\"", def_file, "\"",
+        " /WHOLEARCHIVE:\"", pensdp_lib, "\"",
+        " \"", openblas_lib, "\"",
+        " \"", f2c_lib, "\"",
+    )
+    # Run via a `.bat` file rather than `cmd /c "<compound command>"`: passing
+    # a quoted compound string to `cmd /c` triggers cmd.exe's leading-quote
+    # stripping rules and fails with "is not recognized as an internal or
+    # external command".
+    bat_file = joinpath(LIB_DIR, "build_libpensdp.bat")
+    open(bat_file, "w") do io
+        println(io, "@echo off")
+        println(io, "call \"$(vcvarsall)\" x64 >nul || exit /b 1")
+        println(io, link_cmd, " || exit /b 1")
+    end
+    @info "Linking shared library" link_cmd
+    run(`cmd /c $(bat_file)`)
+    return output
 end
 
 function _write_deps(libpensdp_path)
