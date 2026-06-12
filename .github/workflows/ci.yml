@@ -14,9 +14,14 @@ jobs:
         include:
           - version: '1.10'
             os: ubuntu-latest
-            arch: x64
+            arch: default
           - version: '1'
             os: ubuntu-latest
+            arch: default
+          # PENSDP only ships an Intel macOS binary, so pin to an Intel runner
+          # (macos-latest is arm64; macos-13 is the last native x86_64 image).
+          - version: '1'
+            os: macos-13
             arch: x64
     steps:
       - uses: actions/checkout@v6
@@ -24,6 +29,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+          force-arch: ${{ matrix['force-arch'] || false }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
