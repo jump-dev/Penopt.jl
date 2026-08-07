@@ -1,8 +1,5 @@
 # Penopt.jl
 
-**This repository is still under development. It is not a registered
-Julia package, and has not been tested on macOS or Windows.**
-
 [Penopt.jl](https://github.com/jump-dev/Penopt.jl) is a wrapper for the
 [Penopt Optimizer](http://www.penopt.com/).
 
@@ -26,6 +23,10 @@ The underlying solver is a closed-source commercial product for which you must
 [purchase a license](http://www.penopt.com).
 
 ## Installation
+
+> [!WARNING]
+> Only Linux is supported at the moment.
+> Help is welcome to add support for [Mac OS](https://github.com/jump-dev/Penopt.jl/pull/14) and [Windows](https://github.com/jump-dev/Penopt.jl/pull/15).
 
 You can install `Penopt.jl` through the
 [Julia package manager](https://docs.julialang.org/en/v1/stdlib/Pkg/index.html):
