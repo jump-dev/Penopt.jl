@@ -33,31 +33,33 @@ You can install `Penopt.jl` through the
 ```julia
 ] add https://github.com/jump-dev/Penopt.jl.git
 ```
-then, open a terminal in the directory when Penopt is installed (find this
-directory by writing `using Penopt; pathof(Penopt)` in a Julia session).
-```raw
-$ mkdir -p deps/usr/lib
-$ cd deps/usr/lib
-$ gcc  -Wl,--no-undefined -shared -lm -lgfortran -lopenblas -llapack -o libpenbmi.so -Wl,--whole-archive /path/to/PENBMI2.1/lib/libpenbmi.a -Wl,--no-whole-archive
-```
 
-This will create a shared library `libpenbmi.so` in the directory `deps/usr/lib`.
-Then create the following file `deps/deps.jl`:
+This downloads and builds [PENSDP](https://github.com/kocvara/pensdp), the free
+SDP-only solver of the PENOPT family, which is used by `Penopt.pensdp` and by
+`Penopt.Optimizer` for problems with a linear objective and linear matrix
+inequalities.
+
+### PENBMI
+
+Bilinear matrix inequalities and quadratic objectives require PENBMI, which is a
+commercial product for which you must
+[purchase a license](http://www.penopt.com). Set the `PENOPT_LIBPENBMI`
+environment variable to the path of the PENBMI library and re-run the build:
 ```julia
-import Libdl
-const libpenbmi = joinpath(dirname(@__FILE__), "usr/lib/libpenbmi.so")
-function check_deps()
-    global libpenbmi
-    if !isfile(libpenbmi)
-        error("$(libpenbmi) does not exist, Please re-run Pkg.build(\"Penopt\"), and restart Julia.")
-    end
+ENV["PENOPT_LIBPENBMI"] = "/path/to/PENBMI2.1/lib/libpenbmi.a"
 
-    if Libdl.dlopen_e(libpenbmi) == C_NULL
-        error("$(libpenbmi) cannot be opened, Please re-run Pkg.build(\"Penopt\"), and restart Julia.")
-    end
-
-end
+import Pkg
+Pkg.build("Penopt")
 ```
+then restart Julia.
+
+PENOPT distributes PENBMI as a static library, which Julia cannot call into
+directly. The build detects this and links a shared library from it in
+`deps/usr/lib`; a path pointing to a shared library is used as is.To change the location of the library, update `PENOPT_LIBPENBMI`,
+re-run `Pkg.build("Penopt")` and restart Julia.
+
+Whether PENBMI is available is given by `Penopt.has_penbmi()`.
+
 You can test the installation with `using Pkg; Pkg.test("Penopt")` in a Julia
 session.
 
