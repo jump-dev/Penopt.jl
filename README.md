@@ -55,8 +55,9 @@ then restart Julia.
 
 PENOPT distributes PENBMI as a static library, which Julia cannot call into
 directly. The build detects this and links a shared library from it in
-`deps/usr/lib`; a path pointing to a shared library is used as is.To change the location of the library, update `PENOPT_LIBPENBMI`,
-re-run `Pkg.build("Penopt")` and restart Julia.
+`deps/usr/lib`; a path pointing to a shared library is used as is. To change the
+location of the library, update `PENOPT_LIBPENBMI`, re-run
+`Pkg.build("Penopt")` and restart Julia.
 
 Whether PENBMI is available is given by `Penopt.has_penbmi()`.
 
