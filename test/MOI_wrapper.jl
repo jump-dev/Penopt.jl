@@ -92,14 +92,16 @@ function test_runtests()
             r"test_linear_INFEASIBLE$",
             "test_linear_INFEASIBLE_2",
             "test_solve_TerminationStatus_DUAL_INFEASIBLE",
-            # To investigate
+            # Unboundedness is not detected, the solver stops with `Unknown
+            # error` instead.
             "test_conic_SecondOrderCone_negative_post_bound_2",
             "test_conic_SecondOrderCone_negative_post_bound_3",
             "test_conic_SecondOrderCone_no_initial_bound",
-            "test_constraint_ScalarAffineFunction_GreaterThan",
-            "test_constraint_ScalarAffineFunction_LessThan",
-            "test_constraint_ScalarAffineFunction_duplicate",
-            "test_constraint_VectorAffineFunction_duplicate",
+            # On a model without any matrix constraint, the outer loop never
+            # meets its stopping criterion: it either exhausts the iteration
+            # limit or the linesearch fails, so the status is `ITERATION_LIMIT`
+            # or `NUMERICAL_ERROR` even though the point returned is optimal.
+            # Adding any LMI to the same model gives `LOCALLY_SOLVED`.
             "test_linear_LessThan_and_GreaterThan",
             r"test_linear_VectorAffineFunction$",
             "test_linear_VectorAffineFunction_empty_row",
@@ -110,7 +112,6 @@ function test_runtests()
             "test_modification_coef_scalaraffine_lessthan",
             "test_modification_const_scalar_objective",
             "test_modification_const_vectoraffine_nonpos",
-            "test_modification_const_vectoraffine_zeros",
             "test_modification_delete_variable_with_single_variable_obj",
             "test_modification_func_scalaraffine_lessthan",
             "test_modification_func_vectoraffine_nonneg",
@@ -119,8 +120,6 @@ function test_runtests()
             "test_modification_transform_singlevariable_lessthan",
             "test_objective_ObjectiveFunction_VariableIndex",
             "test_objective_ObjectiveFunction_blank",
-            "test_objective_ObjectiveFunction_constant",
-            "test_objective_ObjectiveFunction_duplicate_terms",
             "test_solve_result_index",
         ]),
     )
