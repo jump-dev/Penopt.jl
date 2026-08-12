@@ -74,7 +74,7 @@ function test_runtests()
                 MOI.DualObjectiveValue,
             ],
         ),
-        exclude = vcat(bmi_only, String[
+        exclude = vcat(bmi_only, Any[
             # Unable to bridge RotatedSecondOrderCone to PSD because the dimension is too small: got 2, expected >= 3.
             "test_conic_SecondOrderCone_INFEASIBLE",
             "test_constraint_PrimalStart_DualStart_SecondOrderCone",
