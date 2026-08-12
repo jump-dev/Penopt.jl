@@ -57,8 +57,6 @@ function test_runtests()
         "test_quadratic_duplicate_terms",
         "test_quadratic_integration",
         "test_quadratic_nonhomogeneous",
-        # PENSDP reports OTHER_ERROR for this edge case; PENBMI handles it.
-        "test_conic_empty_matrix",
     ]
     MOI.Test.runtests(
         model,
@@ -76,19 +74,22 @@ function test_runtests()
                 MOI.DualObjectiveValue,
             ],
         ),
-        exclude = vcat(bmi_only, String[
+        exclude = vcat(bmi_only, Any[
             # Unable to bridge RotatedSecondOrderCone to PSD because the dimension is too small: got 2, expected >= 3.
             "test_conic_SecondOrderCone_INFEASIBLE",
             "test_constraint_PrimalStart_DualStart_SecondOrderCone",
+            # Both PENSDP and PENBMI call `DSYEVX` with an illegal dimension on
+            # the empty matrix and report `OTHER_ERROR`.
+            "test_conic_empty_matrix",
             # Infeasible not supported
             "test_conic_NormInfinityCone_INFEASIBLE",
             "test_conic_NormOneCone_INFEASIBLE",
-            "test_conic_RotatedSecondOrderCone_INFEASIBLE",
-            "test_conic_linear_INFEASIBLE",
+            r"test_conic_RotatedSecondOrderCone_INFEASIBLE$",
+            r"test_conic_linear_INFEASIBLE$",
             "test_conic_linear_INFEASIBLE_2",
-            "test_linear_DUAL_INFEASIBLE",
+            r"test_linear_DUAL_INFEASIBLE$",
             "test_linear_DUAL_INFEASIBLE_2",
-            "test_linear_INFEASIBLE",
+            r"test_linear_INFEASIBLE$",
             "test_linear_INFEASIBLE_2",
             "test_solve_TerminationStatus_DUAL_INFEASIBLE",
             # To investigate
@@ -100,7 +101,7 @@ function test_runtests()
             "test_constraint_ScalarAffineFunction_duplicate",
             "test_constraint_VectorAffineFunction_duplicate",
             "test_linear_LessThan_and_GreaterThan",
-            "test_linear_VectorAffineFunction",
+            r"test_linear_VectorAffineFunction$",
             "test_linear_VectorAffineFunction_empty_row",
             "test_linear_add_constraints",
             "test_linear_modify_GreaterThan_and_LessThan_constraints",

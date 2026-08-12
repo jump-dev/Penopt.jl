@@ -133,9 +133,12 @@ function test_example3()
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ fx_expected rtol=1e-4
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
         @test MOI.get.(optimizer, MOI.VariablePrimal(), x) ≈ x_expected rtol=1e-4
-        @test MOI.get(optimizer, Penopt.NumberOfOuterIterations()) == 12
-        @test MOI.get(optimizer, Penopt.NumberOfNewtonSteps()) == 42
-        @test MOI.get(optimizer, Penopt.NumberOfLinesearchSteps()) == 48
+        # The iterates depend on the BLAS and LAPACK that `libpenbmi` is linked
+        # against so these counts are only checked to be of the right order of
+        # magnitude.
+        @test MOI.get(optimizer, Penopt.NumberOfOuterIterations()) in 8:16
+        @test MOI.get(optimizer, Penopt.NumberOfNewtonSteps()) in 30:60
+        @test MOI.get(optimizer, Penopt.NumberOfLinesearchSteps()) in 35:65
     end
 end
 
