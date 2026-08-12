@@ -75,7 +75,7 @@ function test_example3()
     end
 
     @testset "MOI" begin
-        optimizer = Penopt.Optimizer()
+        optimizer = Penopt.BMI.Optimizer()
         MOI.set(optimizer, MOI.RawOptimizerAttribute("OUTPUT"), 0)
         MOI.set(optimizer, MOI.RawOptimizerAttribute("LS"), 1)
         MOI.set(optimizer, MOI.RawOptimizerAttribute("DIMACS"), 0)

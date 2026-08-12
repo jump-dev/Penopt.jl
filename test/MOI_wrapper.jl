@@ -22,42 +22,46 @@ function runtests()
     return
 end
 
+# `Penopt.BMI.Optimizer` needs the commercial PENBMI library.
+optimizers() =
+    Penopt.has_penbmi() ? [Penopt.SDP.Optimizer, Penopt.BMI.Optimizer] :
+    [Penopt.SDP.Optimizer]
+
 function test_solver_name()
-    expected = Penopt.has_penbmi() ? "Penbmi" : "Pensdp"
-    @test MOI.get(Penopt.Optimizer(), MOI.SolverName()) == expected
+    @test MOI.get(Penopt.SDP.Optimizer(), MOI.SolverName()) == "Pensdp"
+    @test MOI.get(Penopt.BMI.Optimizer(), MOI.SolverName()) == "Penbmi"
 end
 
 function test_supports_default_copy_to()
-    @test MOI.supports_incremental_interface(Penopt.Optimizer())
+    for O in optimizers()
+        @test MOI.supports_incremental_interface(O())
+    end
 end
 
 function test_options()
     param = MOI.RawOptimizerAttribute("bad_option")
     err = MOI.UnsupportedAttribute(param)
-    @test_throws err MOI.set(
-        Penopt.Optimizer(),
-        MOI.RawOptimizerAttribute("bad_option"),
-        0,
-    )
+    for O in optimizers()
+        @test_throws err MOI.set(O(), param, 0)
+    end
 end
 
 function test_runtests()
+    for O in optimizers()
+        @testset "$(O)" begin
+            _test_runtests(O)
+        end
+    end
+end
+
+function _test_runtests(O)
     model = MOI.Utilities.CachingOptimizer(
         MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float64}()),
-        MOI.instantiate(Penopt.Optimizer, with_bridge_type=Float64),
+        MOI.instantiate(O, with_bridge_type=Float64),
     )
     MOI.set(model, MOI.Silent(), true)
     MOI.set(model, MOI.RawOptimizerAttribute("PBM_EPS"), 1e-2)
     MOI.set(model, MOI.RawOptimizerAttribute("P0"), 1e-2)
-    # When libpenbmi is not available, the auto-installed PENSDP cannot solve
-    # problems with a quadratic objective.
-    bmi_only = Penopt.has_penbmi() ? String[] : String[
-        "test_objective_qp_ObjectiveFunction_edge_cases",
-        "test_objective_qp_ObjectiveFunction_zero_ofdiag",
-        "test_quadratic_duplicate_terms",
-        "test_quadratic_integration",
-        "test_quadratic_nonhomogeneous",
-    ]
     MOI.Test.runtests(
         model,
         MOI.Test.Config(
@@ -74,7 +78,7 @@ function test_runtests()
                 MOI.DualObjectiveValue,
             ],
         ),
-        exclude = vcat(bmi_only, Any[
+        exclude = Any[
             # Unable to bridge RotatedSecondOrderCone to PSD because the dimension is too small: got 2, expected >= 3.
             "test_conic_SecondOrderCone_INFEASIBLE",
             "test_constraint_PrimalStart_DualStart_SecondOrderCone",
@@ -121,7 +125,7 @@ function test_runtests()
             "test_objective_ObjectiveFunction_VariableIndex",
             "test_objective_ObjectiveFunction_blank",
             "test_solve_result_index",
-        ]),
+        ],
     )
     return
 end

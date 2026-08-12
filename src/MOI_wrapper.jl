@@ -34,7 +34,19 @@ const FOPTIONS = String[
     "CG_TOL_DIR",
 ]
 
-mutable struct Optimizer <: MOI.AbstractOptimizer
+"""
+    abstract type AbstractOptimizer <: MOI.AbstractOptimizer end
+
+Supertype of [`Penopt.SDP.Optimizer`](@ref) and [`Penopt.BMI.Optimizer`](@ref).
+Both hold the same problem data and only differ by the solver they call and by
+the objective and constraints they accept.
+"""
+abstract type AbstractOptimizer <: MOI.AbstractOptimizer end
+
+# `Solver` is `:SDP` or `:BMI`. The two solvers of the PENOPT family read the
+# same problem data, so the fields are shared and only the methods that select
+# what is sent to the C API are specialized.
+mutable struct Optimizer{Solver} <: AbstractOptimizer
     objective_sign::Cdouble
     objective_constant::Cdouble
     msizes::Vector{Cint}
@@ -69,8 +81,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     ioptions::Vector{Cint}
     foptions::Vector{Cdouble}
     silent::Bool
-    function Optimizer()
-        return new(
+    function Optimizer{Solver}() where {Solver}
+        return new{Solver}(
             1.0,
             0.0,
             Cint[],
@@ -109,12 +121,20 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     end
 end
 
-MOI.get(::Optimizer, ::MOI.SolverName) = has_penbmi() ? "Penbmi" : "Pensdp"
+MOI.get(::Optimizer{:SDP}, ::MOI.SolverName) = "Pensdp"
+MOI.get(::Optimizer{:BMI}, ::MOI.SolverName) = "Penbmi"
 
-function MOI.supports(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
+function MOI.supports(
+    optimizer::AbstractOptimizer,
+    param::MOI.RawOptimizerAttribute,
+)
     return param.name in IOPTIONS || param.name in FOPTIONS
 end
-function MOI.set(optimizer::Optimizer, param::MOI.RawOptimizerAttribute, value)
+function MOI.set(
+    optimizer::AbstractOptimizer,
+    param::MOI.RawOptimizerAttribute,
+    value,
+)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         optimizer.ioptions[i] = value
@@ -127,7 +147,7 @@ function MOI.set(optimizer::Optimizer, param::MOI.RawOptimizerAttribute, value)
     end
     return throw(MOI.UnsupportedAttribute(param))
 end
-function MOI.get(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
+function MOI.get(optimizer::AbstractOptimizer, param::MOI.RawOptimizerAttribute)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         return optimizer.ioptions[i]
@@ -139,16 +159,16 @@ function MOI.get(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     return throw(MOI.UnsupportedAttribute(param))
 end
 
-MOI.supports(::Optimizer, ::MOI.Silent) = true
-function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
+MOI.supports(::AbstractOptimizer, ::MOI.Silent) = true
+function MOI.set(optimizer::AbstractOptimizer, ::MOI.Silent, value::Bool)
     return optimizer.silent = value
 end
-MOI.get(optimizer::Optimizer, ::MOI.Silent) = optimizer.silent
+MOI.get(optimizer::AbstractOptimizer, ::MOI.Silent) = optimizer.silent
 
-function MOI.is_empty(optimizer::Optimizer)
+function MOI.is_empty(optimizer::AbstractOptimizer)
     return true
 end
-function MOI.empty!(optimizer::Optimizer)
+function MOI.empty!(optimizer::AbstractOptimizer)
     optimizer.objective_sign = 1.0
     optimizer.objective_constant = 0.0
     empty!(optimizer.msizes)
@@ -180,22 +200,22 @@ function MOI.empty!(optimizer::Optimizer)
     return
 end
 
-MOI.supports_incremental_interface(::Optimizer) = true
-function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
+MOI.supports_incremental_interface(::AbstractOptimizer) = true
+function MOI.copy_to(dest::AbstractOptimizer, src::MOI.ModelLike)
     return MOI.Utilities.default_copy_to(dest, src)
 end
 
-function MOI.add_variable(optimizer::Optimizer)
+function MOI.add_variable(optimizer::AbstractOptimizer)
     push!(optimizer.x0, 0.0)
     push!(optimizer.fobj, 0.0)
     return MOI.VariableIndex(length(optimizer.x0))
 end
 
-function MOI.supports(::Optimizer, ::MOI.ObjectiveSense)
+function MOI.supports(::AbstractOptimizer, ::MOI.ObjectiveSense)
     return true
 end
 function MOI.set(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::MOI.ObjectiveSense,
     sense::MOI.OptimizationSense,
 )
@@ -222,19 +242,22 @@ function MOI.set(
     return
 end
 function MOI.supports(
-    ::Optimizer,
-    ::MOI.ObjectiveFunction{
-        <:Union{
-            MOI.ScalarAffineFunction{Cdouble},
-            MOI.ScalarQuadraticFunction{Cdouble},
-        },
-    },
+    ::AbstractOptimizer,
+    ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
+)
+    return true
+end
+# Only PENBMI minimizes a quadratic objective. `Penopt.SDP.Optimizer` leaves it
+# unsupported so that the bridges move it into a constraint that PENSDP solves.
+function MOI.supports(
+    ::Optimizer{:BMI},
+    ::MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Cdouble}},
 )
     return true
 end
 # TODO remove once we have the objective bridge aff -> quad
 function MOI.set(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
     func::MOI.ScalarAffineFunction{Cdouble},
 )
@@ -242,7 +265,7 @@ function MOI.set(
     return MOI.set(optimizer, MOI.ObjectiveFunction{typeof(quad)}(), quad)
 end
 function MOI.set(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Cdouble}},
     func::MOI.ScalarQuadraticFunction{Cdouble},
 )
@@ -270,14 +293,14 @@ function MOI.set(
 end
 
 function MOI.supports(
-    ::Optimizer,
+    ::AbstractOptimizer,
     ::MOI.VariablePrimalStart,
     ::Type{MOI.VariableIndex},
 )
     return true
 end
 function MOI.set(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::MOI.VariablePrimalStart,
     vi::MOI.VariableIndex,
     value::Cdouble,
@@ -286,7 +309,7 @@ function MOI.set(
     return
 end
 function MOI.set(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::MOI.VariablePrimalStart,
     vi::MOI.VariableIndex,
     ::Nothing,
@@ -296,14 +319,14 @@ function MOI.set(
 end
 
 function MOI.supports_constraint(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::Type{MOI.ScalarAffineFunction{Cdouble}},
     ::Type{MOI.LessThan{Cdouble}},
 )
     return true
 end
 function MOI.add_constraint(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     func::MOI.ScalarAffineFunction{Cdouble},
     set::MOI.LessThan{Cdouble},
 )
@@ -326,8 +349,11 @@ function MOI.add_constraint(
     )
 end
 
+# A quadratic matrix constraint is a BMI, only PENBMI handles it. On
+# `Penopt.SDP.Optimizer` the bridges reformulate it, or fail if it is not
+# convex.
 function MOI.supports_constraint(
-    optimizer::Optimizer,
+    ::Optimizer{:BMI},
     ::Type{MOI.VectorQuadraticFunction{Cdouble}},
     ::Type{MOI.PositiveSemidefiniteConeTriangle},
 )
@@ -395,7 +421,7 @@ function _sort_and_compress!(x::AbstractVector, by, keep, combine)
 end
 
 function MOI.add_constraint(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     func::MOI.VectorQuadraticFunction{Cdouble},
     set::MOI.PositiveSemidefiniteConeTriangle,
 )
@@ -460,14 +486,14 @@ end
 # TODO This should be removed once we have a bridged
 #      doing affine -> quadratic
 function MOI.supports_constraint(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     ::Type{MOI.VectorAffineFunction{Cdouble}},
     ::Type{MOI.PositiveSemidefiniteConeTriangle},
 )
     return true
 end
 function MOI.add_constraint(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     func::MOI.VectorAffineFunction{Cdouble},
     set::MOI.PositiveSemidefiniteConeTriangle,
 )
@@ -482,80 +508,82 @@ function MOI.add_constraint(
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(ci.value)
 end
 
-_is_sdp(optimizer::Optimizer) =
-    isempty(optimizer.q_val) && isempty(optimizer.ki_val)
-
-function MOI.optimize!(optimizer::Optimizer)
-    ioptions = optimizer.ioptions
-    if optimizer.silent
-        ioptions = copy(ioptions)
-        ioptions[4] = 0 # OUTPUT : no output
-        ioptions[11] = 0 # DIMACS : no
-    end
+function _start_solve!(optimizer::AbstractOptimizer)
     optimizer.x = copy(optimizer.x0)
-    # PENSDP (auto-installed) handles SDP. Fall back to PENBMI when the
-    # objective has a quadratic part or when there are BMI (`K`) terms.
-    if _is_sdp(optimizer) && !has_penbmi()
-        optimizer.fx,
-        _,
-        optimizer.uoutput,
-        optimizer.iresults,
-        optimizer.fresults,
-        optimizer.info = pensdp(
-            optimizer.msizes,
-            optimizer.x,
-            optimizer.fobj,
-            optimizer.ci,
-            optimizer.bi_dim,
-            optimizer.bi_idx,
-            optimizer.bi_val,
-            optimizer.ai_dim,
-            optimizer.ai_idx,
-            optimizer.ai_nzs,
-            optimizer.ai_val,
-            optimizer.ai_col,
-            optimizer.ai_row,
-            ioptions,
-            optimizer.foptions,
-        )
-    else
-        optimizer.fx,
-        _,
-        optimizer.uoutput,
-        optimizer.iresults,
-        optimizer.fresults,
-        optimizer.info = penbmi(
-            optimizer.msizes,
-            optimizer.x,
-            optimizer.fobj,
-            optimizer.q_col,
-            optimizer.q_row,
-            optimizer.q_val,
-            optimizer.ci,
-            optimizer.bi_dim,
-            optimizer.bi_idx,
-            optimizer.bi_val,
-            optimizer.ai_dim,
-            optimizer.ai_idx,
-            optimizer.ai_nzs,
-            optimizer.ai_val,
-            optimizer.ai_col,
-            optimizer.ai_row,
-            optimizer.ki_dim,
-            optimizer.ki_idx,
-            optimizer.kj_idx,
-            optimizer.ki_nzs,
-            optimizer.ki_val,
-            optimizer.ki_col,
-            optimizer.ki_row,
-            ioptions,
-            optimizer.foptions,
-        )
+    if !optimizer.silent
+        return optimizer.ioptions
     end
+    ioptions = copy(optimizer.ioptions)
+    ioptions[4] = 0 # OUTPUT : no output
+    ioptions[11] = 0 # DIMACS : no
+    return ioptions
+end
+
+function MOI.optimize!(optimizer::Optimizer{:SDP})
+    ioptions = _start_solve!(optimizer)
+    optimizer.fx,
+    _,
+    optimizer.uoutput,
+    optimizer.iresults,
+    optimizer.fresults,
+    optimizer.info = pensdp(
+        optimizer.msizes,
+        optimizer.x,
+        optimizer.fobj,
+        optimizer.ci,
+        optimizer.bi_dim,
+        optimizer.bi_idx,
+        optimizer.bi_val,
+        optimizer.ai_dim,
+        optimizer.ai_idx,
+        optimizer.ai_nzs,
+        optimizer.ai_val,
+        optimizer.ai_col,
+        optimizer.ai_row,
+        ioptions,
+        optimizer.foptions,
+    )
     return
 end
 
-function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
+function MOI.optimize!(optimizer::Optimizer{:BMI})
+    ioptions = _start_solve!(optimizer)
+    optimizer.fx,
+    _,
+    optimizer.uoutput,
+    optimizer.iresults,
+    optimizer.fresults,
+    optimizer.info = penbmi(
+        optimizer.msizes,
+        optimizer.x,
+        optimizer.fobj,
+        optimizer.q_col,
+        optimizer.q_row,
+        optimizer.q_val,
+        optimizer.ci,
+        optimizer.bi_dim,
+        optimizer.bi_idx,
+        optimizer.bi_val,
+        optimizer.ai_dim,
+        optimizer.ai_idx,
+        optimizer.ai_nzs,
+        optimizer.ai_val,
+        optimizer.ai_col,
+        optimizer.ai_row,
+        optimizer.ki_dim,
+        optimizer.ki_idx,
+        optimizer.kj_idx,
+        optimizer.ki_nzs,
+        optimizer.ki_val,
+        optimizer.ki_col,
+        optimizer.ki_row,
+        ioptions,
+        optimizer.foptions,
+    )
+    return
+end
+
+function MOI.get(optimizer::AbstractOptimizer, ::MOI.SolveTimeSec)
     return convert(Float64, optimizer.iresults[4])
 end
 const INFO = String[
@@ -568,7 +596,7 @@ const INFO = String[
     "Memory error.",
     "Unknown error, please contact PENOPT Gbr (contact @penopt.com).",
 ]
-function MOI.get(optimizer::Optimizer, ::MOI.RawStatusString)
+function MOI.get(optimizer::AbstractOptimizer, ::MOI.RawStatusString)
     return INFO[optimizer.info + 1]
 end
 
@@ -579,7 +607,7 @@ The number of outer iterations.
 """
 struct NumberOfOuterIterations <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfOuterIterations) = true
-function MOI.get(optimizer::Optimizer, ::NumberOfOuterIterations)
+function MOI.get(optimizer::AbstractOptimizer, ::NumberOfOuterIterations)
     return optimizer.iresults[1]
 end
 
@@ -590,7 +618,7 @@ The number of Newton steps.
 """
 struct NumberOfNewtonSteps <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfNewtonSteps) = true
-function MOI.get(optimizer::Optimizer, ::NumberOfNewtonSteps)
+function MOI.get(optimizer::AbstractOptimizer, ::NumberOfNewtonSteps)
     return optimizer.iresults[2]
 end
 
@@ -601,11 +629,11 @@ The number of linesearch steps.
 """
 struct NumberOfLinesearchSteps <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfLinesearchSteps) = true
-function MOI.get(optimizer::Optimizer, ::NumberOfLinesearchSteps)
+function MOI.get(optimizer::AbstractOptimizer, ::NumberOfLinesearchSteps)
     return optimizer.iresults[3]
 end
 
-function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
+function MOI.get(optimizer::AbstractOptimizer, ::MOI.TerminationStatus)
     s = optimizer.info
     @assert -1 <= s <= 7
     if s == -1
@@ -625,14 +653,14 @@ function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
     end
 end
 
-function MOI.get(optimizer::Optimizer, attr::MOI.ObjectiveValue)
+function MOI.get(optimizer::AbstractOptimizer, attr::MOI.ObjectiveValue)
     MOI.check_result_index_bounds(optimizer, attr)
     return optimizer.objective_sign * optimizer.fx +
            optimizer.objective_constant
 end
 
 function MOI.get(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     attr::Union{MOI.PrimalStatus,MOI.DualStatus},
 )
     if attr.result_index > MOI.get(optimizer, MOI.ResultCount())
@@ -647,7 +675,7 @@ function MOI.get(
     end
 end
 function MOI.get(
-    optimizer::Optimizer,
+    optimizer::AbstractOptimizer,
     attr::MOI.VariablePrimal,
     vi::MOI.VariableIndex,
 )
@@ -655,6 +683,40 @@ function MOI.get(
     return optimizer.x[vi.value]
 end
 
-function MOI.get(optimizer::Optimizer, ::MOI.ResultCount)
+function MOI.get(optimizer::AbstractOptimizer, ::MOI.ResultCount)
     return optimizer.info in [-1, 5] ? 0 : 1
 end
+
+module SDP
+
+import ..Penopt
+
+"""
+    Penopt.SDP.Optimizer()
+
+Optimizer solving semidefinite programs with [`Penopt.pensdp`](@ref), which is
+installed by `Pkg.build("Penopt")`. It supports a linear objective and linear
+matrix inequalities; the bridges reformulate a convex quadratic objective into
+an additional matrix constraint. Use [`Penopt.BMI.Optimizer`](@ref) to solve
+these natively and to solve bilinear matrix inequalities.
+"""
+const Optimizer = Penopt.Optimizer{:SDP}
+
+end # module SDP
+
+module BMI
+
+import ..Penopt
+
+"""
+    Penopt.BMI.Optimizer()
+
+Optimizer solving bilinear matrix inequalities with [`Penopt.penbmi`](@ref). It
+supports a quadratic objective and quadratic matrix inequalities on top of what
+[`Penopt.SDP.Optimizer`](@ref) supports. PENBMI is a commercial product, see
+the `Installation` section of the README; whether it is available is given by
+[`Penopt.has_penbmi`](@ref).
+"""
+const Optimizer = Penopt.Optimizer{:BMI}
+
+end # module BMI

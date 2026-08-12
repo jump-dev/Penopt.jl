@@ -56,7 +56,7 @@ function test_driver_sdp_c()
 end
 
 function test_moi_sdp()
-    optimizer = Penopt.Optimizer()
+    optimizer = Penopt.SDP.Optimizer()
     MOI.set(optimizer, MOI.RawOptimizerAttribute("OUTPUT"), 0)
     MOI.set(optimizer, MOI.RawOptimizerAttribute("DIMACS"), 0)
     x = MOI.add_variables(optimizer, 3)

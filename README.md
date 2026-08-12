@@ -36,8 +36,7 @@ You can install `Penopt.jl` through the
 
 This downloads and builds [PENSDP](https://github.com/kocvara/pensdp), the free
 SDP-only solver of the PENOPT family, which is used by `Penopt.pensdp` and by
-`Penopt.Optimizer` for problems with a linear objective and linear matrix
-inequalities.
+`Penopt.SDP.Optimizer`.
 
 ### PENBMI
 
@@ -66,11 +65,25 @@ session.
 
 ## Use with JuMP
 
+Pick the solver explicitly: `Penopt.SDP.Optimizer` solves semidefinite programs
+with PENSDP, `Penopt.BMI.Optimizer` solves bilinear matrix inequalities and
+quadratic objectives with PENBMI.
+
 ```julia
 using JuMP, Penopt
-model = Model(Penopt.Optimizer)
+model = Model(Penopt.SDP.Optimizer)
 set_attribute(model, "PBM_MAX_ITER", 100)
 set_attribute(model, "TR_MODE", 1)
+```
+
+`Penopt.SDP.Optimizer` supports a linear objective and linear matrix
+inequalities; a convex quadratic objective is reformulated into an additional
+matrix constraint by the JuMP bridges. Anything PENBMI-specific, that is, a
+quadratic objective or a matrix inequality with bilinear entries, is solved
+natively by `Penopt.BMI.Optimizer`:
+
+```julia
+model = Model(Penopt.BMI.Optimizer)
 ```
 
 ## Options
