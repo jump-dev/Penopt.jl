@@ -35,18 +35,15 @@ const FOPTIONS = String[
 ]
 
 """
-    abstract type AbstractOptimizer <: MOI.AbstractOptimizer end
+    mutable struct Optimizer{Solver} <: MOI.AbstractOptimizer
 
-Supertype of [`Penopt.SDP.Optimizer`](@ref) and [`Penopt.BMI.Optimizer`](@ref).
-Both hold the same problem data and only differ by the solver they call and by
-the objective and constraints they accept.
+Problem data in the form expected by the C API. `Solver` is `:SDP` or `:BMI`;
+the two solvers of the PENOPT family read the same data, so only the methods
+selecting what is sent to the C API are specialized. Use
+[`Penopt.SDP.Optimizer`](@ref) or [`Penopt.BMI.Optimizer`](@ref) rather than
+this type directly.
 """
-abstract type AbstractOptimizer <: MOI.AbstractOptimizer end
-
-# `Solver` is `:SDP` or `:BMI`. The two solvers of the PENOPT family read the
-# same problem data, so the fields are shared and only the methods that select
-# what is sent to the C API are specialized.
-mutable struct Optimizer{Solver} <: AbstractOptimizer
+mutable struct Optimizer{Solver} <: MOI.AbstractOptimizer
     objective_sign::Cdouble
     objective_constant::Cdouble
     msizes::Vector{Cint}
@@ -125,13 +122,13 @@ MOI.get(::Optimizer{:SDP}, ::MOI.SolverName) = "Pensdp"
 MOI.get(::Optimizer{:BMI}, ::MOI.SolverName) = "Penbmi"
 
 function MOI.supports(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     param::MOI.RawOptimizerAttribute,
 )
     return param.name in IOPTIONS || param.name in FOPTIONS
 end
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     param::MOI.RawOptimizerAttribute,
     value,
 )
@@ -147,7 +144,7 @@ function MOI.set(
     end
     return throw(MOI.UnsupportedAttribute(param))
 end
-function MOI.get(optimizer::AbstractOptimizer, param::MOI.RawOptimizerAttribute)
+function MOI.get(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         return optimizer.ioptions[i]
@@ -159,16 +156,16 @@ function MOI.get(optimizer::AbstractOptimizer, param::MOI.RawOptimizerAttribute)
     return throw(MOI.UnsupportedAttribute(param))
 end
 
-MOI.supports(::AbstractOptimizer, ::MOI.Silent) = true
-function MOI.set(optimizer::AbstractOptimizer, ::MOI.Silent, value::Bool)
+MOI.supports(::Optimizer, ::MOI.Silent) = true
+function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
     return optimizer.silent = value
 end
-MOI.get(optimizer::AbstractOptimizer, ::MOI.Silent) = optimizer.silent
+MOI.get(optimizer::Optimizer, ::MOI.Silent) = optimizer.silent
 
-function MOI.is_empty(optimizer::AbstractOptimizer)
+function MOI.is_empty(optimizer::Optimizer)
     return true
 end
-function MOI.empty!(optimizer::AbstractOptimizer)
+function MOI.empty!(optimizer::Optimizer)
     optimizer.objective_sign = 1.0
     optimizer.objective_constant = 0.0
     empty!(optimizer.msizes)
@@ -200,22 +197,22 @@ function MOI.empty!(optimizer::AbstractOptimizer)
     return
 end
 
-MOI.supports_incremental_interface(::AbstractOptimizer) = true
-function MOI.copy_to(dest::AbstractOptimizer, src::MOI.ModelLike)
+MOI.supports_incremental_interface(::Optimizer) = true
+function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
     return MOI.Utilities.default_copy_to(dest, src)
 end
 
-function MOI.add_variable(optimizer::AbstractOptimizer)
+function MOI.add_variable(optimizer::Optimizer)
     push!(optimizer.x0, 0.0)
     push!(optimizer.fobj, 0.0)
     return MOI.VariableIndex(length(optimizer.x0))
 end
 
-function MOI.supports(::AbstractOptimizer, ::MOI.ObjectiveSense)
+function MOI.supports(::Optimizer, ::MOI.ObjectiveSense)
     return true
 end
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::MOI.ObjectiveSense,
     sense::MOI.OptimizationSense,
 )
@@ -242,7 +239,7 @@ function MOI.set(
     return
 end
 function MOI.supports(
-    ::AbstractOptimizer,
+    ::Optimizer,
     ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
 )
     return true
@@ -257,7 +254,7 @@ function MOI.supports(
 end
 # TODO remove once we have the objective bridge aff -> quad
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
     func::MOI.ScalarAffineFunction{Cdouble},
 )
@@ -265,7 +262,7 @@ function MOI.set(
     return MOI.set(optimizer, MOI.ObjectiveFunction{typeof(quad)}(), quad)
 end
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Cdouble}},
     func::MOI.ScalarQuadraticFunction{Cdouble},
 )
@@ -293,14 +290,14 @@ function MOI.set(
 end
 
 function MOI.supports(
-    ::AbstractOptimizer,
+    ::Optimizer,
     ::MOI.VariablePrimalStart,
     ::Type{MOI.VariableIndex},
 )
     return true
 end
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::MOI.VariablePrimalStart,
     vi::MOI.VariableIndex,
     value::Cdouble,
@@ -309,7 +306,7 @@ function MOI.set(
     return
 end
 function MOI.set(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::MOI.VariablePrimalStart,
     vi::MOI.VariableIndex,
     ::Nothing,
@@ -319,14 +316,14 @@ function MOI.set(
 end
 
 function MOI.supports_constraint(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::Type{MOI.ScalarAffineFunction{Cdouble}},
     ::Type{MOI.LessThan{Cdouble}},
 )
     return true
 end
 function MOI.add_constraint(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     func::MOI.ScalarAffineFunction{Cdouble},
     set::MOI.LessThan{Cdouble},
 )
@@ -421,7 +418,7 @@ function _sort_and_compress!(x::AbstractVector, by, keep, combine)
 end
 
 function MOI.add_constraint(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     func::MOI.VectorQuadraticFunction{Cdouble},
     set::MOI.PositiveSemidefiniteConeTriangle,
 )
@@ -486,14 +483,14 @@ end
 # TODO This should be removed once we have a bridged
 #      doing affine -> quadratic
 function MOI.supports_constraint(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     ::Type{MOI.VectorAffineFunction{Cdouble}},
     ::Type{MOI.PositiveSemidefiniteConeTriangle},
 )
     return true
 end
 function MOI.add_constraint(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     func::MOI.VectorAffineFunction{Cdouble},
     set::MOI.PositiveSemidefiniteConeTriangle,
 )
@@ -508,7 +505,7 @@ function MOI.add_constraint(
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(ci.value)
 end
 
-function _start_solve!(optimizer::AbstractOptimizer)
+function _start_solve!(optimizer::Optimizer)
     optimizer.x = copy(optimizer.x0)
     if !optimizer.silent
         return optimizer.ioptions
@@ -583,7 +580,7 @@ function MOI.optimize!(optimizer::Optimizer{:BMI})
     return
 end
 
-function MOI.get(optimizer::AbstractOptimizer, ::MOI.SolveTimeSec)
+function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
     return convert(Float64, optimizer.iresults[4])
 end
 const INFO = String[
@@ -596,7 +593,7 @@ const INFO = String[
     "Memory error.",
     "Unknown error, please contact PENOPT Gbr (contact @penopt.com).",
 ]
-function MOI.get(optimizer::AbstractOptimizer, ::MOI.RawStatusString)
+function MOI.get(optimizer::Optimizer, ::MOI.RawStatusString)
     return INFO[optimizer.info + 1]
 end
 
@@ -607,7 +604,7 @@ The number of outer iterations.
 """
 struct NumberOfOuterIterations <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfOuterIterations) = true
-function MOI.get(optimizer::AbstractOptimizer, ::NumberOfOuterIterations)
+function MOI.get(optimizer::Optimizer, ::NumberOfOuterIterations)
     return optimizer.iresults[1]
 end
 
@@ -618,7 +615,7 @@ The number of Newton steps.
 """
 struct NumberOfNewtonSteps <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfNewtonSteps) = true
-function MOI.get(optimizer::AbstractOptimizer, ::NumberOfNewtonSteps)
+function MOI.get(optimizer::Optimizer, ::NumberOfNewtonSteps)
     return optimizer.iresults[2]
 end
 
@@ -629,11 +626,11 @@ The number of linesearch steps.
 """
 struct NumberOfLinesearchSteps <: MOI.AbstractModelAttribute end
 MOI.is_set_by_optimize(::NumberOfLinesearchSteps) = true
-function MOI.get(optimizer::AbstractOptimizer, ::NumberOfLinesearchSteps)
+function MOI.get(optimizer::Optimizer, ::NumberOfLinesearchSteps)
     return optimizer.iresults[3]
 end
 
-function MOI.get(optimizer::AbstractOptimizer, ::MOI.TerminationStatus)
+function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
     s = optimizer.info
     @assert -1 <= s <= 7
     if s == -1
@@ -653,14 +650,14 @@ function MOI.get(optimizer::AbstractOptimizer, ::MOI.TerminationStatus)
     end
 end
 
-function MOI.get(optimizer::AbstractOptimizer, attr::MOI.ObjectiveValue)
+function MOI.get(optimizer::Optimizer, attr::MOI.ObjectiveValue)
     MOI.check_result_index_bounds(optimizer, attr)
     return optimizer.objective_sign * optimizer.fx +
            optimizer.objective_constant
 end
 
 function MOI.get(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     attr::Union{MOI.PrimalStatus,MOI.DualStatus},
 )
     if attr.result_index > MOI.get(optimizer, MOI.ResultCount())
@@ -675,7 +672,7 @@ function MOI.get(
     end
 end
 function MOI.get(
-    optimizer::AbstractOptimizer,
+    optimizer::Optimizer,
     attr::MOI.VariablePrimal,
     vi::MOI.VariableIndex,
 )
@@ -683,7 +680,7 @@ function MOI.get(
     return optimizer.x[vi.value]
 end
 
-function MOI.get(optimizer::AbstractOptimizer, ::MOI.ResultCount)
+function MOI.get(optimizer::Optimizer, ::MOI.ResultCount)
     return optimizer.info in [-1, 5] ? 0 : 1
 end
 
