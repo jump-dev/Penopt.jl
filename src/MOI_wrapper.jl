@@ -34,7 +34,16 @@ const FOPTIONS = String[
     "CG_TOL_DIR",
 ]
 
-mutable struct Optimizer <: MOI.AbstractOptimizer
+"""
+    mutable struct Optimizer{Solver} <: MOI.AbstractOptimizer
+
+Problem data in the form expected by the C API. `Solver` is `:SDP` or `:BMI`;
+the two solvers of the PENOPT family read the same data, so only the methods
+selecting what is sent to the C API are specialized. Use
+[`Penopt.SDP.Optimizer`](@ref) or [`Penopt.BMI.Optimizer`](@ref) rather than
+this type directly.
+"""
+mutable struct Optimizer{Solver} <: MOI.AbstractOptimizer
     objective_sign::Cdouble
     objective_constant::Cdouble
     msizes::Vector{Cint}
@@ -69,8 +78,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     ioptions::Vector{Cint}
     foptions::Vector{Cdouble}
     silent::Bool
-    function Optimizer()
-        return new(
+    function Optimizer{Solver}() where {Solver}
+        return new{Solver}(
             1.0,
             0.0,
             Cint[],
@@ -109,12 +118,20 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     end
 end
 
-MOI.get(::Optimizer, ::MOI.SolverName) = has_penbmi() ? "Penbmi" : "Pensdp"
+MOI.get(::Optimizer{:SDP}, ::MOI.SolverName) = "Pensdp"
+MOI.get(::Optimizer{:BMI}, ::MOI.SolverName) = "Penbmi"
 
-function MOI.supports(optimizer::Optimizer, param::MOI.RawOptimizerAttribute)
+function MOI.supports(
+    optimizer::Optimizer,
+    param::MOI.RawOptimizerAttribute,
+)
     return param.name in IOPTIONS || param.name in FOPTIONS
 end
-function MOI.set(optimizer::Optimizer, param::MOI.RawOptimizerAttribute, value)
+function MOI.set(
+    optimizer::Optimizer,
+    param::MOI.RawOptimizerAttribute,
+    value,
+)
     i = findfirst(isequal(param.name), IOPTIONS)
     if i !== nothing
         optimizer.ioptions[i] = value
@@ -223,12 +240,15 @@ function MOI.set(
 end
 function MOI.supports(
     ::Optimizer,
-    ::MOI.ObjectiveFunction{
-        <:Union{
-            MOI.ScalarAffineFunction{Cdouble},
-            MOI.ScalarQuadraticFunction{Cdouble},
-        },
-    },
+    ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Cdouble}},
+)
+    return true
+end
+# Only PENBMI minimizes a quadratic objective. `Penopt.SDP.Optimizer` leaves it
+# unsupported so that the bridges move it into a constraint that PENSDP solves.
+function MOI.supports(
+    ::Optimizer{:BMI},
+    ::MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Cdouble}},
 )
     return true
 end
@@ -326,8 +346,11 @@ function MOI.add_constraint(
     )
 end
 
+# A quadratic matrix constraint is a BMI, only PENBMI handles it. On
+# `Penopt.SDP.Optimizer` the bridges reformulate it, or fail if it is not
+# convex.
 function MOI.supports_constraint(
-    optimizer::Optimizer,
+    ::Optimizer{:BMI},
     ::Type{MOI.VectorQuadraticFunction{Cdouble}},
     ::Type{MOI.PositiveSemidefiniteConeTriangle},
 )
@@ -482,76 +505,78 @@ function MOI.add_constraint(
     return MOI.ConstraintIndex{typeof(func),typeof(set)}(ci.value)
 end
 
-_is_sdp(optimizer::Optimizer) =
-    isempty(optimizer.q_val) && isempty(optimizer.ki_val)
-
-function MOI.optimize!(optimizer::Optimizer)
-    ioptions = optimizer.ioptions
-    if optimizer.silent
-        ioptions = copy(ioptions)
-        ioptions[4] = 0 # OUTPUT : no output
-        ioptions[11] = 0 # DIMACS : no
-    end
+function _start_solve!(optimizer::Optimizer)
     optimizer.x = copy(optimizer.x0)
-    # PENSDP (auto-installed) handles SDP. Fall back to PENBMI when the
-    # objective has a quadratic part or when there are BMI (`K`) terms.
-    if _is_sdp(optimizer) && !has_penbmi()
-        optimizer.fx,
-        _,
-        optimizer.uoutput,
-        optimizer.iresults,
-        optimizer.fresults,
-        optimizer.info = pensdp(
-            optimizer.msizes,
-            optimizer.x,
-            optimizer.fobj,
-            optimizer.ci,
-            optimizer.bi_dim,
-            optimizer.bi_idx,
-            optimizer.bi_val,
-            optimizer.ai_dim,
-            optimizer.ai_idx,
-            optimizer.ai_nzs,
-            optimizer.ai_val,
-            optimizer.ai_col,
-            optimizer.ai_row,
-            ioptions,
-            optimizer.foptions,
-        )
-    else
-        optimizer.fx,
-        _,
-        optimizer.uoutput,
-        optimizer.iresults,
-        optimizer.fresults,
-        optimizer.info = penbmi(
-            optimizer.msizes,
-            optimizer.x,
-            optimizer.fobj,
-            optimizer.q_col,
-            optimizer.q_row,
-            optimizer.q_val,
-            optimizer.ci,
-            optimizer.bi_dim,
-            optimizer.bi_idx,
-            optimizer.bi_val,
-            optimizer.ai_dim,
-            optimizer.ai_idx,
-            optimizer.ai_nzs,
-            optimizer.ai_val,
-            optimizer.ai_col,
-            optimizer.ai_row,
-            optimizer.ki_dim,
-            optimizer.ki_idx,
-            optimizer.kj_idx,
-            optimizer.ki_nzs,
-            optimizer.ki_val,
-            optimizer.ki_col,
-            optimizer.ki_row,
-            ioptions,
-            optimizer.foptions,
-        )
+    if !optimizer.silent
+        return optimizer.ioptions
     end
+    ioptions = copy(optimizer.ioptions)
+    ioptions[4] = 0 # OUTPUT : no output
+    ioptions[11] = 0 # DIMACS : no
+    return ioptions
+end
+
+function MOI.optimize!(optimizer::Optimizer{:SDP})
+    ioptions = _start_solve!(optimizer)
+    optimizer.fx,
+    _,
+    optimizer.uoutput,
+    optimizer.iresults,
+    optimizer.fresults,
+    optimizer.info = pensdp(
+        optimizer.msizes,
+        optimizer.x,
+        optimizer.fobj,
+        optimizer.ci,
+        optimizer.bi_dim,
+        optimizer.bi_idx,
+        optimizer.bi_val,
+        optimizer.ai_dim,
+        optimizer.ai_idx,
+        optimizer.ai_nzs,
+        optimizer.ai_val,
+        optimizer.ai_col,
+        optimizer.ai_row,
+        ioptions,
+        optimizer.foptions,
+    )
+    return
+end
+
+function MOI.optimize!(optimizer::Optimizer{:BMI})
+    ioptions = _start_solve!(optimizer)
+    optimizer.fx,
+    _,
+    optimizer.uoutput,
+    optimizer.iresults,
+    optimizer.fresults,
+    optimizer.info = penbmi(
+        optimizer.msizes,
+        optimizer.x,
+        optimizer.fobj,
+        optimizer.q_col,
+        optimizer.q_row,
+        optimizer.q_val,
+        optimizer.ci,
+        optimizer.bi_dim,
+        optimizer.bi_idx,
+        optimizer.bi_val,
+        optimizer.ai_dim,
+        optimizer.ai_idx,
+        optimizer.ai_nzs,
+        optimizer.ai_val,
+        optimizer.ai_col,
+        optimizer.ai_row,
+        optimizer.ki_dim,
+        optimizer.ki_idx,
+        optimizer.kj_idx,
+        optimizer.ki_nzs,
+        optimizer.ki_val,
+        optimizer.ki_col,
+        optimizer.ki_row,
+        ioptions,
+        optimizer.foptions,
+    )
     return
 end
 
@@ -658,3 +683,37 @@ end
 function MOI.get(optimizer::Optimizer, ::MOI.ResultCount)
     return optimizer.info in [-1, 5] ? 0 : 1
 end
+
+module SDP
+
+import ..Penopt
+
+"""
+    Penopt.SDP.Optimizer()
+
+Optimizer solving semidefinite programs with [`Penopt.pensdp`](@ref), which is
+installed by `Pkg.build("Penopt")`. It supports a linear objective and linear
+matrix inequalities; the bridges reformulate a convex quadratic objective into
+an additional matrix constraint. Use [`Penopt.BMI.Optimizer`](@ref) to solve
+these natively and to solve bilinear matrix inequalities.
+"""
+const Optimizer = Penopt.Optimizer{:SDP}
+
+end # module SDP
+
+module BMI
+
+import ..Penopt
+
+"""
+    Penopt.BMI.Optimizer()
+
+Optimizer solving bilinear matrix inequalities with [`Penopt.penbmi`](@ref). It
+supports a quadratic objective and quadratic matrix inequalities on top of what
+[`Penopt.SDP.Optimizer`](@ref) supports. PENBMI is a commercial product, see
+the `Installation` section of the README; whether it is available is given by
+[`Penopt.has_penbmi`](@ref).
+"""
+const Optimizer = Penopt.Optimizer{:BMI}
+
+end # module BMI

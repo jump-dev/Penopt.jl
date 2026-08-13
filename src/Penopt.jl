@@ -15,6 +15,13 @@ else
     )
 end
 
+"""
+    has_penbmi()
+
+Return whether the commercial PENBMI library, required by [`penbmi`](@ref) and
+`Penopt.BMI.Optimizer`, was found by `Pkg.build("Penopt")`. See the
+`Installation` section of the README to install it.
+"""
 has_penbmi() = !isempty(libpenbmi)
 
 const DEFAULT_IOPTIONS = Cint[1, 50, 100, 2, 0, 0, 0, 0, 0, 0, 1, 0]
