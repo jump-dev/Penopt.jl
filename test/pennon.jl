@@ -11,10 +11,18 @@ using JuMP
 import MathOptInterface as MOI
 import Penopt
 
+function _model()
+    model = Model(Penopt.Pennon.Optimizer)
+    set_silent(model)
+    return model
+end
+
 function test_interface()
     model = Penopt.Pennon.Optimizer()
     @test MOI.get(model, MOI.SolverName()) == "Pennon"
     @test MOI.supports_incremental_interface(model)
+    @test MOI.get(model, MOI.Bridges.ListOfNonstandardBridges{Float64}()) ==
+          [Penopt._PennonNonlinearPSDBridge]
     @test MOI.supports(
         model,
         MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction}(),
@@ -24,6 +32,30 @@ function test_interface()
         MOI.VectorNonlinearFunction,
         MOI.PositiveSemidefiniteConeTriangle,
     )
+    for F in (
+        MOI.VariableIndex,
+        MOI.ScalarAffineFunction{Float64},
+        MOI.ScalarQuadraticFunction{Float64},
+    )
+        @test !MOI.supports(model, MOI.ObjectiveFunction{F}())
+        @test !MOI.supports_constraint(model, F, MOI.LessThan{Float64})
+    end
+    for F in (
+        MOI.VectorOfVariables,
+        MOI.VectorAffineFunction{Float64},
+        MOI.VectorQuadraticFunction{Float64},
+    )
+        @test !MOI.supports_constraint(
+            model,
+            F,
+            MOI.PositiveSemidefiniteConeTriangle,
+        )
+        @test MOI.supports_constraint(
+            MOI.Bridges.full_bridge_optimizer(model, Float64),
+            F,
+            MOI.PositiveSemidefiniteConeTriangle,
+        )
+    end
     MOI.set(model, MOI.Silent(), true)
     MOI.add_variable(model)
     MOI.empty!(model)
@@ -36,31 +68,39 @@ function test_scalar_constraint_dispatch()
     model = Penopt.Pennon.Optimizer()
     x = MOI.add_variable(model)
     @test MOI.get(model, MOI.NumberOfVariables()) == 1
-    variable_ci = MOI.add_constraint(model, x, MOI.LessThan(2.0))
-    @test variable_ci ==
-          MOI.ConstraintIndex{MOI.VariableIndex,MOI.LessThan{Float64}}(1)
     f = MOI.ScalarNonlinearFunction(:sin, Any[x])
     ci = MOI.add_constraint(model, f, MOI.GreaterThan(0.0))
     @test ci == MOI.ConstraintIndex{
         MOI.ScalarNonlinearFunction,
         MOI.GreaterThan{Float64},
-    }(2)
+    }(1)
     return
 end
 
-function test_vector_nonlinear_function()
+function test_quadratic_matrix_constraint()
     Penopt.has_pennon() || return
-    model = Model(Penopt.Pennon.Optimizer)
-    set_silent(model)
+    model = _model()
     @variable(model, x, start = 0.5)
     @objective(model, Max, x)
-    @expression(model, entry, @force_nonlinear(1 - x^2))
+    @expression(model, entry, 1 - x^2)
     @constraint(model, [entry] in MOI.PositiveSemidefiniteConeTriangle(1))
     optimize!(model)
     @test termination_status(model) == MOI.LOCALLY_SOLVED
     @test primal_status(model) == MOI.FEASIBLE_POINT
     @test objective_value(model) ≈ 1.0 atol = 1e-5
     @test value(x) ≈ 1.0 atol = 1e-5
+    return
+end
+
+function test_quadratic_scalar_constraint()
+    Penopt.has_pennon() || return
+    model = _model()
+    @variable(model, x >= 0, start = 1.5)
+    @objective(model, Min, x^2)
+    @constraint(model, (x - 2)^2 <= 1)
+    _solve_and_check(model)
+    @test value(x) ≈ 1.0 atol = 1e-5
+    @test objective_value(model) ≈ 1.0 atol = 1e-5
     return
 end
 
@@ -80,21 +120,16 @@ end
 # the eigenvalues and makes the packed off-diagonal entries distinguishable.
 function test_nearest_correlation_matrix()
     Penopt.has_pennon() || return
-    model = Model(Penopt.Pennon.Optimizer)
-    set_silent(model)
+    model = _model()
     @variable(model, X[i = 1:3, j = 1:3], Symmetric, start = Float64(i == j))
     H = [1.0 1.0 -1.0; 1.0 1.0 1.0; -1.0 1.0 1.0]
     @objective(
         model,
         Min,
-        @force_nonlinear(
-            sum((X[i, j] - H[i, j])^2 for i in 1:3, j in 1:3),
-        ),
+        sum((X[i, j] - H[i, j])^2 for i in 1:3, j in 1:3),
     )
     @constraint(model, [i in 1:3], X[i, i] == 1)
-    # Explicit nonlinear entries exercise the VectorNonlinearFunction backend
-    # even when a particular PSD constraint happens to be affine.
-    @constraint(model, Symmetric(convert.(NonlinearExpr, X)) in PSDCone())
+    @constraint(model, X in PSDCone())
     _solve_and_check(model)
     solution = value.(X)
     # In the sign-transformed coordinates all off-diagonals equal -1/2:
@@ -110,8 +145,7 @@ end
 
 function test_conditioned_correlation_matrix()
     Penopt.has_pennon() || return
-    model = Model(Penopt.Pennon.Optimizer)
-    set_silent(model)
+    model = _model()
     @variable(model, Y[i = 1:3, j = 1:3], Symmetric, start = 2.0 * (i == j))
     @variable(model, 1 <= zeta <= 4, start = 2.0)
     H = [1.0 1.0 -1.0; 1.0 1.0 1.0; -1.0 1.0 1.0]
@@ -122,8 +156,8 @@ function test_conditioned_correlation_matrix()
     )
     @constraint(model, [i in 1:3], Y[i, i] == zeta)
     # Both spectral bounds are separate PSD blocks, as in (40).
-    @constraint(model, Symmetric(convert.(NonlinearExpr, Y - I)) in PSDCone())
-    @constraint(model, Symmetric(convert.(NonlinearExpr, 4I - Y)) in PSDCone())
+    @constraint(model, Y - I in PSDCone())
+    @constraint(model, 4I - Y in PSDCone())
     _solve_and_check(model)
     solution = value.(Y)
     X = solution / value(zeta)
@@ -146,12 +180,11 @@ end
 # (t-1/2)^2 + 1/4, so the independent optimum is zero residual.
 function test_nonnegative_spline()
     Penopt.has_pennon() || return
-    model = Model(Penopt.Pennon.Optimizer)
-    set_silent(model)
+    model = _model()
     @variable(model, X[i = 1:2, j = 1:2], Symmetric, start = Float64(i == j))
     @variable(model, S[i = 1:2, j = 1:2], Symmetric, start = Float64(i == j))
-    @constraint(model, Symmetric(convert.(NonlinearExpr, X)) in PSDCone())
-    @constraint(model, Symmetric(convert.(NonlinearExpr, S)) in PSDCone())
+    @constraint(model, X in PSDCone())
+    @constraint(model, S in PSDCone())
     @expression(
         model,
         coefficients,
@@ -171,9 +204,7 @@ function test_nonnegative_spline()
     @objective(
         model,
         Min,
-        @force_nonlinear(
-            sum((prediction[t] - ((t - 0.5)^2 + 0.25))^2 for t in samples),
-        ),
+        sum((prediction[t] - ((t - 0.5)^2 + 0.25))^2 for t in samples),
     )
     _solve_and_check(model)
     c = value.(coefficients)
@@ -189,13 +220,12 @@ end
 
 function test_nonlinear_matrix_off_diagonal()
     Penopt.has_pennon() || return
-    model = Model(Penopt.Pennon.Optimizer)
-    set_silent(model)
+    model = _model()
     @variable(model, x, start = 0.2)
     @variable(model, y, start = 0.4)
     @objective(model, Max, x + 2y)
     @expression(model, matrix, [1-x^2 x*y; x*y 1-y^2])
-    @constraint(model, Symmetric(convert.(NonlinearExpr, matrix)) in PSDCone())
+    @constraint(model, Symmetric(matrix) in PSDCone())
     # This matrix is PSD exactly when x^2 + y^2 <= 1. Cauchy-Schwarz
     # gives the unique maximizer (1,2)/sqrt(5) and objective sqrt(5).
     _solve_and_check(model)

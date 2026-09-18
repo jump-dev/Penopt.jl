@@ -223,6 +223,61 @@ mutable struct PennonOptimizer <: MOI.AbstractOptimizer
 end
 
 MOI.get(::PennonOptimizer, ::MOI.SolverName) = "Pennon"
+
+# MOI's FunctionConversionBridge does not yet implement conversion to
+# VectorNonlinearFunction. Keep this conversion in a bridge, not the optimizer.
+struct _PennonNonlinearPSDBridge <:
+       MOI.Bridges.Constraint.AbstractFunctionConversionBridge{
+    MOI.VectorNonlinearFunction,
+    MOI.PositiveSemidefiniteConeTriangle,
+}
+    constraint::MOI.ConstraintIndex{
+        MOI.VectorNonlinearFunction,
+        MOI.PositiveSemidefiniteConeTriangle,
+    }
+end
+
+function MOI.get(
+    ::PennonOptimizer,
+    ::MOI.Bridges.ListOfNonstandardBridges{Cdouble},
+)
+    return Type[_PennonNonlinearPSDBridge]
+end
+
+function MOI.supports_constraint(
+    ::Type{_PennonNonlinearPSDBridge},
+    ::Type{<:Union{
+        MOI.VectorOfVariables,
+        MOI.VectorAffineFunction{Cdouble},
+        MOI.VectorQuadraticFunction{Cdouble},
+    }},
+    ::Type{MOI.PositiveSemidefiniteConeTriangle},
+)
+    return true
+end
+
+function MOI.Bridges.Constraint.concrete_bridge_type(
+    ::Type{_PennonNonlinearPSDBridge},
+    ::Type{<:MOI.AbstractVectorFunction},
+    ::Type{MOI.PositiveSemidefiniteConeTriangle},
+)
+    return _PennonNonlinearPSDBridge
+end
+
+function MOI.Bridges.Constraint.bridge_constraint(
+    ::Type{_PennonNonlinearPSDBridge},
+    model::MOI.ModelLike,
+    f::MOI.AbstractVectorFunction,
+    set::MOI.PositiveSemidefiniteConeTriangle,
+)
+    g = MOI.VectorNonlinearFunction(
+        MOI.ScalarNonlinearFunction[row for row in MOI.Utilities.eachscalar(f)],
+    )
+    return _PennonNonlinearPSDBridge(MOI.add_constraint(model, g, set))
+end
+
+MOI.Bridges.bridging_cost(::Type{_PennonNonlinearPSDBridge}) = 100.0
+
 MOI.supports_incremental_interface(::PennonOptimizer) = true
 MOI.copy_to(dest::PennonOptimizer, src::MOI.ModelLike) =
     MOI.Utilities.default_copy_to(dest, src)
@@ -266,21 +321,23 @@ function MOI.set(model::PennonOptimizer, ::MOI.ObjectiveSense, sense)
     return
 end
 
-for F in (
-    MOI.VariableIndex,
-    MOI.ScalarAffineFunction{Cdouble},
-    MOI.ScalarQuadraticFunction{Cdouble},
-    MOI.ScalarNonlinearFunction,
+# Only accept nonlinear functions and let MOI bridges convert affine and
+# quadratic inputs. TODO: add native quadratic support once
+# https://github.com/jump-dev/MathOptInterface.jl/pull/3048 lands, so that we can
+# use specialized quadratic AD instead of the slightly slower nonlinear AD.
+function MOI.supports(
+    ::PennonOptimizer,
+    ::MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction},
 )
-    @eval MOI.supports(::PennonOptimizer, ::MOI.ObjectiveFunction{$F}) = true
-    @eval function MOI.set(
-        model::PennonOptimizer,
-        ::MOI.ObjectiveFunction{$F},
-        f::$F,
-    )
-        model.objective = convert(MOI.ScalarNonlinearFunction, f)
-        return
-    end
+    return true
+end
+function MOI.set(
+    model::PennonOptimizer,
+    ::MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction},
+    f::MOI.ScalarNonlinearFunction,
+)
+    model.objective = f
+    return
 end
 
 function MOI.supports(
@@ -300,12 +357,6 @@ function MOI.set(
     return
 end
 
-const _PENNON_SCALAR_FUNCTIONS = Union{
-    MOI.VariableIndex,
-    MOI.ScalarAffineFunction{Cdouble},
-    MOI.ScalarQuadraticFunction{Cdouble},
-    MOI.ScalarNonlinearFunction,
-}
 const _PENNON_SCALAR_SETS = Union{
     MOI.LessThan{Cdouble},
     MOI.GreaterThan{Cdouble},
@@ -315,19 +366,21 @@ const _PENNON_SCALAR_SETS = Union{
 
 function MOI.supports_constraint(
     ::PennonOptimizer,
-    ::Type{F},
+    ::Type{MOI.ScalarNonlinearFunction},
     ::Type{S},
-) where {F<:_PENNON_SCALAR_FUNCTIONS,S<:_PENNON_SCALAR_SETS}
+) where {S<:_PENNON_SCALAR_SETS}
     return true
 end
 
 function MOI.add_constraint(
     model::PennonOptimizer,
-    f::F,
+    f::MOI.ScalarNonlinearFunction,
     set::S,
-) where {F<:_PENNON_SCALAR_FUNCTIONS,S<:_PENNON_SCALAR_SETS}
-    push!(model.constraints, (convert(MOI.ScalarNonlinearFunction, f), set))
-    return MOI.ConstraintIndex{F,S}(length(model.constraints))
+) where {S<:_PENNON_SCALAR_SETS}
+    push!(model.constraints, (f, set))
+    return MOI.ConstraintIndex{MOI.ScalarNonlinearFunction,S}(
+        length(model.constraints),
+    )
 end
 
 function MOI.supports_constraint(
