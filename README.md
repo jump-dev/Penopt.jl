@@ -63,9 +63,9 @@ Whether PENBMI is available is given by `Penopt.has_penbmi()`.
 ### PENNON
 
 The nonlinear PENNON backend is enabled by setting `PENOPT_LIBPENNON` to a
-PENNON shared library or static archive and rebuilding the package. On Linux
-x86-64, `deps/LX/libpennon_LX64.a` is detected automatically when present.
-Availability is reported by `Penopt.has_pennon()`.
+PENNON shared library or static archive, re-running `Pkg.build("Penopt")`, and
+restarting Julia, as for PENBMI. Availability is reported by
+`Penopt.has_pennon()`.
 
 `Penopt.Pennon.Optimizer` accepts nonlinear scalar objectives and constraints,
 and accepts nonlinear semidefinite constraints as an
