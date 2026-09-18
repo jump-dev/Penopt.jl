@@ -10,4 +10,5 @@ include("sdp.jl")
 if Penopt.has_penbmi()
     include("bmi.jl")
 end
+include("pennon.jl")
 include("MOI_wrapper.jl")
