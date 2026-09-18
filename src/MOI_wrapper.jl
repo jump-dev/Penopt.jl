@@ -683,37 +683,3 @@ end
 function MOI.get(optimizer::Optimizer, ::MOI.ResultCount)
     return optimizer.info in [-1, 5] ? 0 : 1
 end
-
-module SDP
-
-import ..Penopt
-
-"""
-    Penopt.SDP.Optimizer()
-
-Optimizer solving semidefinite programs with [`Penopt.pensdp`](@ref), which is
-installed by `Pkg.build("Penopt")`. It supports a linear objective and linear
-matrix inequalities; the bridges reformulate a convex quadratic objective into
-an additional matrix constraint. Use [`Penopt.BMI.Optimizer`](@ref) to solve
-these natively and to solve bilinear matrix inequalities.
-"""
-const Optimizer = Penopt.Optimizer{:SDP}
-
-end # module SDP
-
-module BMI
-
-import ..Penopt
-
-"""
-    Penopt.BMI.Optimizer()
-
-Optimizer solving bilinear matrix inequalities with [`Penopt.penbmi`](@ref). It
-supports a quadratic objective and quadratic matrix inequalities on top of what
-[`Penopt.SDP.Optimizer`](@ref) supports. PENBMI is a commercial product, see
-the `Installation` section of the README; whether it is available is given by
-[`Penopt.has_penbmi`](@ref).
-"""
-const Optimizer = Penopt.Optimizer{:BMI}
-
-end # module BMI
