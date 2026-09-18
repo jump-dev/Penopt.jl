@@ -60,6 +60,19 @@ location of the library, update `PENOPT_LIBPENBMI`, re-run
 
 Whether PENBMI is available is given by `Penopt.has_penbmi()`.
 
+### PENNON
+
+The nonlinear PENNON backend is enabled by setting `PENOPT_LIBPENNON` to a
+PENNON shared library or static archive and rebuilding the package. On Linux
+x86-64, `deps/LX/libpennon_LX64.a` is detected automatically when present.
+Availability is reported by `Penopt.has_pennon()`.
+
+`Penopt.Pennon.Optimizer` accepts nonlinear scalar objectives and constraints,
+and accepts nonlinear semidefinite constraints as an
+`MOI.VectorNonlinearFunction` in an
+`MOI.PositiveSemidefiniteConeTriangle`. Derivatives are evaluated with MOI's
+sparse reverse-mode automatic differentiation.
+
 You can test the installation with `using Pkg; Pkg.test("Penopt")` in a Julia
 session.
 
@@ -67,7 +80,8 @@ session.
 
 Pick the solver explicitly: `Penopt.SDP.Optimizer` solves semidefinite programs
 with PENSDP, `Penopt.BMI.Optimizer` solves bilinear matrix inequalities and
-quadratic objectives with PENBMI.
+quadratic objectives with PENBMI, and `Penopt.Pennon.Optimizer` solves general
+nonlinear semidefinite programs with PENNON.
 
 ```julia
 using JuMP, Penopt
