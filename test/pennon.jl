@@ -22,7 +22,10 @@ function test_interface()
     @test MOI.get(model, MOI.SolverName()) == "Pennon"
     @test MOI.supports_incremental_interface(model)
     @test MOI.get(model, MOI.Bridges.ListOfNonstandardBridges{Float64}()) ==
-          [Penopt._PennonNonlinearPSDBridge]
+          [MOI.Bridges.Constraint.FunctionConversionBridge{
+              Float64,
+              MOI.VectorNonlinearFunction,
+          }]
     @test MOI.supports(
         model,
         MOI.ObjectiveFunction{MOI.ScalarNonlinearFunction}(),

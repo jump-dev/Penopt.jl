@@ -224,59 +224,17 @@ end
 
 MOI.get(::PennonOptimizer, ::MOI.SolverName) = "Pennon"
 
-# MOI's FunctionConversionBridge does not yet implement conversion to
-# VectorNonlinearFunction. Keep this conversion in a bridge, not the optimizer.
-struct _PennonNonlinearPSDBridge <:
-       MOI.Bridges.Constraint.AbstractFunctionConversionBridge{
-    MOI.VectorNonlinearFunction,
-    MOI.PositiveSemidefiniteConeTriangle,
-}
-    constraint::MOI.ConstraintIndex{
-        MOI.VectorNonlinearFunction,
-        MOI.PositiveSemidefiniteConeTriangle,
-    }
-end
-
 function MOI.get(
     ::PennonOptimizer,
     ::MOI.Bridges.ListOfNonstandardBridges{Cdouble},
 )
-    return Type[_PennonNonlinearPSDBridge]
+    return Type[
+        MOI.Bridges.Constraint.FunctionConversionBridge{
+            Cdouble,
+            MOI.VectorNonlinearFunction,
+        },
+    ]
 end
-
-function MOI.supports_constraint(
-    ::Type{_PennonNonlinearPSDBridge},
-    ::Type{<:Union{
-        MOI.VectorOfVariables,
-        MOI.VectorAffineFunction{Cdouble},
-        MOI.VectorQuadraticFunction{Cdouble},
-    }},
-    ::Type{MOI.PositiveSemidefiniteConeTriangle},
-)
-    return true
-end
-
-function MOI.Bridges.Constraint.concrete_bridge_type(
-    ::Type{_PennonNonlinearPSDBridge},
-    ::Type{<:MOI.AbstractVectorFunction},
-    ::Type{MOI.PositiveSemidefiniteConeTriangle},
-)
-    return _PennonNonlinearPSDBridge
-end
-
-function MOI.Bridges.Constraint.bridge_constraint(
-    ::Type{_PennonNonlinearPSDBridge},
-    model::MOI.ModelLike,
-    f::MOI.AbstractVectorFunction,
-    set::MOI.PositiveSemidefiniteConeTriangle,
-)
-    g = MOI.VectorNonlinearFunction(
-        MOI.ScalarNonlinearFunction[row for row in MOI.Utilities.eachscalar(f)],
-    )
-    return _PennonNonlinearPSDBridge(MOI.add_constraint(model, g, set))
-end
-
-MOI.Bridges.bridging_cost(::Type{_PennonNonlinearPSDBridge}) = 100.0
 
 MOI.supports_incremental_interface(::PennonOptimizer) = true
 MOI.copy_to(dest::PennonOptimizer, src::MOI.ModelLike) =
