@@ -503,12 +503,12 @@ function MOI.get(model::PennonOptimizer, attr::MOI.PrimalStatus)
     return model.info == 0 ? MOI.FEASIBLE_POINT : MOI.UNKNOWN_RESULT_STATUS
 end
 
-module Pennon
+module NON
 
 import ..Penopt
 
 """
-    Penopt.Pennon.Optimizer()
+    Penopt.NON.Optimizer()
 
 Optimizer for nonlinear semidefinite programs. Matrix constraints are accepted
 as `MOI.VectorNonlinearFunction`-in-`MOI.PositiveSemidefiniteConeTriangle` and
@@ -516,4 +516,4 @@ their derivatives are supplied to PENNON by MOI's sparse reverse-mode AD.
 """
 const Optimizer = Penopt.PennonOptimizer
 
-end # module Pennon
+end # module NON

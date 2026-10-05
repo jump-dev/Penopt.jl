@@ -12,13 +12,13 @@ import MathOptInterface as MOI
 import Penopt
 
 function _model()
-    model = Model(Penopt.Pennon.Optimizer)
+    model = Model(Penopt.NON.Optimizer)
     set_silent(model)
     return model
 end
 
 function test_interface()
-    model = Penopt.Pennon.Optimizer()
+    model = Penopt.NON.Optimizer()
     @test MOI.get(model, MOI.SolverName()) == "Pennon"
     @test MOI.supports_incremental_interface(model)
     @test MOI.get(model, MOI.Bridges.ListOfNonstandardBridges{Float64}()) ==
@@ -68,7 +68,7 @@ function test_interface()
 end
 
 function test_scalar_constraint_dispatch()
-    model = Penopt.Pennon.Optimizer()
+    model = Penopt.NON.Optimizer()
     x = MOI.add_variable(model)
     @test MOI.get(model, MOI.NumberOfVariables()) == 1
     f = MOI.ScalarNonlinearFunction(:sin, Any[x])
