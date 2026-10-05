@@ -33,7 +33,7 @@ has_penbmi() = !isempty(libpenbmi)
 """
     has_pennon()
 
-Return whether the PENNON library used by [`Penopt.Pennon.Optimizer`](@ref) was
+Return whether the PENNON library used by [`Penopt.NON.Optimizer`](@ref) was
 found by `Pkg.build("Penopt")`.
 """
 has_pennon() = !isempty(libpennon)

@@ -67,7 +67,7 @@ PENNON shared library or static archive, re-running `Pkg.build("Penopt")`, and
 restarting Julia, as for PENBMI. Availability is reported by
 `Penopt.has_pennon()`.
 
-`Penopt.Pennon.Optimizer` accepts nonlinear scalar objectives and constraints,
+`Penopt.NON.Optimizer` accepts nonlinear scalar objectives and constraints,
 and accepts nonlinear semidefinite constraints as an
 `MOI.VectorNonlinearFunction` in an
 `MOI.PositiveSemidefiniteConeTriangle`. Derivatives are evaluated with MOI's
@@ -80,7 +80,7 @@ session.
 
 Pick the solver explicitly: `Penopt.SDP.Optimizer` solves semidefinite programs
 with PENSDP, `Penopt.BMI.Optimizer` solves bilinear matrix inequalities and
-quadratic objectives with PENBMI, and `Penopt.Pennon.Optimizer` solves general
+quadratic objectives with PENBMI, and `Penopt.NON.Optimizer` solves general
 nonlinear semidefinite programs with PENNON.
 
 ```julia
@@ -99,6 +99,17 @@ natively by `Penopt.BMI.Optimizer`:
 ```julia
 model = Model(Penopt.BMI.Optimizer)
 ```
+
+For general nonlinear objectives, scalar constraints, and matrix inequalities,
+use the PENNON backend:
+
+```julia
+model = Model(Penopt.NON.Optimizer)
+```
+
+Enable the PENNON library as described in [PENNON](#pennon) above. MOI bridges
+automatically convert affine and quadratic functions to nonlinear functions,
+so JuMP expressions do not need explicit nonlinear conversion.
 
 ## Options
 
