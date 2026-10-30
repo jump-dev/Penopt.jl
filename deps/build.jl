@@ -13,6 +13,7 @@
 # to the auto-installed PENSDP library.
 
 using Libdl
+import OpenBLAS32_jll
 
 const PENSDP_VERSION = "2.2"
 const PENSDP_REPO = "https://github.com/kocvara/pensdp"
@@ -137,14 +138,20 @@ end
 function _build_windows(extract_dir, lib_src)
     pensdp_lib = joinpath(lib_src, "pensdp64.lib")
     openblas_lib = joinpath(lib_src, "libopenblas.lib")
-    f2c_lib = joinpath(lib_src, "libf2c64.lib")
-    for f in (pensdp_lib, openblas_lib, f2c_lib)
+    # Unlike `libpensdp.a` on Linux, `pensdp64.lib` does not bundle the
+    # `penout`, `penerr`, `uout` and `xout` callbacks; the vendor's makefile
+    # compiles them from `c/penout.c` and links them in.
+    penout_c = joinpath(extract_dir, "c", "penout.c")
+    for f in (pensdp_lib, openblas_lib, penout_c)
         isfile(f) || error("$(f) not found")
     end
     output = joinpath(LIB_DIR, "libpensdp.dll")
-    # libpensdp.dll calls into OpenBLAS at runtime; copy the bundled DLL next
-    # to it so Windows finds it via the standard search order.
-    openblas_dll = joinpath(extract_dir, "bin", "libopenblas.dll")
+    # libpensdp.dll imports `libopenblas.dll` (LP64, 32-bit integers); copy
+    # one next to it so Windows finds it via the standard search order. The
+    # DLL bundled with PENSDP needs `libgfortran-3.dll`, which is not shipped,
+    # so we use OpenBLAS32_jll's build instead: it exports the same symbols
+    # and its `libgfortran-5.dll` dependency ships with Julia.
+    openblas_dll = OpenBLAS32_jll.libopenblas_path
     isfile(openblas_dll) || error("$(openblas_dll) not found")
     cp(openblas_dll, joinpath(LIB_DIR, "libopenblas.dll"); force = true)
     # `pensdp64.lib` has no DLL exports, so we write a `.def` file listing the
@@ -155,13 +162,19 @@ function _build_windows(extract_dir, lib_src)
         println(io, "    pensdp")
     end
     vcvarsall = _find_vcvarsall()
+    penout_obj = joinpath(LIB_DIR, "penout.obj")
+    cl_cmd = string(
+        "cl.exe /nologo /O2 /MD /c /D _CRT_SECURE_NO_WARNINGS",
+        " /Fo\"", penout_obj, "\"",
+        " \"", penout_c, "\"",
+    )
     link_cmd = string(
         "link.exe /DLL /MACHINE:X64",
         " /OUT:\"", output, "\"",
         " /DEF:\"", def_file, "\"",
+        " \"", penout_obj, "\"",
         " /WHOLEARCHIVE:\"", pensdp_lib, "\"",
         " \"", openblas_lib, "\"",
-        " \"", f2c_lib, "\"",
     )
     # Run via a `.bat` file rather than `cmd /c "<compound command>"`: passing
     # a quoted compound string to `cmd /c` triggers cmd.exe's leading-quote
@@ -171,9 +184,10 @@ function _build_windows(extract_dir, lib_src)
     open(bat_file, "w") do io
         println(io, "@echo off")
         println(io, "call \"$(vcvarsall)\" x64 >nul || exit /b 1")
+        println(io, cl_cmd, " || exit /b 1")
         println(io, link_cmd, " || exit /b 1")
     end
-    @info "Linking shared library" link_cmd
+    @info "Linking shared library" cl_cmd link_cmd
     run(`cmd /c $(bat_file)`)
     return output
 end
